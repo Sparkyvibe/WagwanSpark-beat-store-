@@ -1,0 +1,20 @@
+{
+  "name": "wagwanspark-beat-store",
+  "version": "1.0.0",
+  "description": "Beat Store",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest"
+  },
+  "keywords": [
+    "beats",
+    "music",
+    "store"
+  ],
+  "author": "Sparkyvibe",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
