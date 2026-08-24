@@ -1,0 +1,10 @@
+name = "wagwanspark-beat-store"
+main = "src/index.js"
+compatibility_date = "2024-01-15"
+
+[site]
+bucket = "public"
+
+[env.production]
+name = "wagwanspark-beat-store-prod"
+route = "example.com/*"
