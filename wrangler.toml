@@ -2,8 +2,9 @@ name = "wagwanspark-beat-store"
 main = "src/index.js"
 compatibility_date = "2024-01-15"
 
-[site]
-bucket = "public"
+[assets]
+directory = "public"
+binding = "ASSETS"
 
 [env.production]
 name = "wagwanspark-beat-store-prod"
