@@ -7,6 +7,19 @@
 
 const BEATS_CATALOG = [
   {
+  id: "sun-fire",
+  title: "SUN FIRE",
+  genre: "Afrobeat",
+  bpm: 105,
+  key: "A Minor",
+  price: 15000,
+  artwork: "/images/sun-fire.jpg",
+  previewAudio: "/audio/sun-fire-preview.mp3",
+  description: "Afrobeat instrumental",
+  available: true,
+  featured: true
+ },
+ {  
     id: "golden-dreams",
     title: "Golden Dreams",
     genre: "Trap",
