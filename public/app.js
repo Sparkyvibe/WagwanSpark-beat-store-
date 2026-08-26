@@ -105,6 +105,7 @@ const state = {
 // ==========================================
 const beatsGrid = document.getElementById('beatsGrid');
 const filterButtonsContainer = document.querySelector('.filter-buttons');
+const beatSearchInput = document.getElementById('beatSearch');
 const playerModal = document.getElementById('playerModal');
 const closePlayer = document.getElementById('closePlayer');
 const audioPlayer = document.getElementById('audioPlayer');
@@ -484,6 +485,11 @@ function handleBuyBeat(beat) {
 // EVENT LISTENERS
 // ==========================================
 function setupEventListeners() {
+  // Search input
+  beatSearchInput.addEventListener('input', (e) => {
+    handleSearch(e.target.value);
+  });
+
   // Player controls
   closePlayer.addEventListener('click', closePlayerModal);
   playBtn.addEventListener('click', togglePlay);
