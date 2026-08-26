@@ -1,0 +1,74 @@
+[
+  {
+    "id": "golden-dreams",
+    "title": "Golden Dreams",
+    "genre": "Trap",
+    "bpm": 140,
+    "key": "C Minor",
+    "price": 2500,
+    "artwork": "https://images.unsplash.com/photo-1487180144351-b8472da7d491?w=400&h=400&fit=crop",
+    "previewAudio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    "description": "High-energy trap beat with dark, moody vibes. Perfect for rap and hip-hop production.",
+    "category": "trap"
+  },
+  {
+    "id": "night-vibes",
+    "title": "Night Vibes",
+    "genre": "R&B",
+    "bpm": 95,
+    "key": "Bb Major",
+    "price": 3000,
+    "artwork": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
+    "previewAudio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    "description": "Smooth R&B instrumental with soulful melodies and warm production.",
+    "category": "rnb"
+  },
+  {
+    "id": "afro-groove",
+    "title": "Afro Groove",
+    "genre": "Afrobeat",
+    "bpm": 120,
+    "key": "G Major",
+    "price": 2800,
+    "artwork": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop",
+    "previewAudio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+    "description": "Authentic Afrobeat production with rich percussion and infectious grooves.",
+    "category": "afrobeat"
+  },
+  {
+    "id": "urban-heat",
+    "title": "Urban Heat",
+    "genre": "Hip-Hop",
+    "bpm": 100,
+    "key": "F# Minor",
+    "price": 3200,
+    "artwork": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop",
+    "previewAudio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+    "description": "Classic hip-hop beat with boom-bap drums and tight production.",
+    "category": "hiphop"
+  },
+  {
+    "id": "midnight-energy",
+    "title": "Midnight Energy",
+    "genre": "Trap",
+    "bpm": 150,
+    "key": "D Minor",
+    "price": 2900,
+    "artwork": "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&h=400&fit=crop",
+    "previewAudio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+    "description": "Fast-paced trap beat with aggressive energy and modern sound design.",
+    "category": "trap"
+  },
+  {
+    "id": "soulful-journey",
+    "title": "Soulful Journey",
+    "genre": "R&B",
+    "bpm": 88,
+    "key": "Eb Major",
+    "price": 3500,
+    "artwork": "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=400&h=400&fit=crop",
+    "previewAudio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+    "description": "Emotional R&B instrumental with lush strings and deep bass.",
+    "category": "rnb"
+  }
+]
