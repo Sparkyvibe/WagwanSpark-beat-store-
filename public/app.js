@@ -1,73 +1,3 @@
-// Beat data with realistic placeholder information
-const beatsData = [
-    {
-        id: 1,
-        title: 'Golden Dreams',
-        genre: 'Trap',
-        bpm: 140,
-        key: 'C Minor',
-        price: '₦2,500',
-        artwork: 'https://images.unsplash.com/photo-1487180144351-b8472da7d491?w=400&h=400&fit=crop',
-        audioFile: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-        category: 'trap'
-    },
-    {
-        id: 2,
-        title: 'Night Vibes',
-        genre: 'R&B',
-        bpm: 95,
-        key: 'Bb Major',
-        price: '₦3,000',
-        artwork: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
-        audioFile: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-        category: 'rnb'
-    },
-    {
-        id: 3,
-        title: 'Afro Groove',
-        genre: 'Afrobeat',
-        bpm: 120,
-        key: 'G Major',
-        price: '₦2,800',
-        artwork: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop',
-        audioFile: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
-        category: 'afrobeat'
-    },
-    {
-        id: 4,
-        title: 'Urban Heat',
-        genre: 'Hip-Hop',
-        bpm: 100,
-        key: 'F# Minor',
-        price: '₦3,200',
-        artwork: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop',
-        audioFile: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
-        category: 'hiphop'
-    },
-    {
-        id: 5,
-        title: 'Midnight Energy',
-        genre: 'Trap',
-        bpm: 150,
-        key: 'D Minor',
-        price: '₦2,900',
-        artwork: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&h=400&fit=crop',
-        audioFile: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
-        category: 'trap'
-    },
-    {
-        id: 6,
-        title: 'Soulful Journey',
-        genre: 'R&B',
-        bpm: 88,
-        key: 'Eb Major',
-        price: '₦3,500',
-        artwork: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=400&h=400&fit=crop',
-        audioFile: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
-        category: 'rnb'
-    }
-];
-
 // DOM Elements
 const beatsGrid = document.getElementById('beatsGrid');
 const filterButtons = document.querySelectorAll('.filter-btn');
@@ -83,12 +13,44 @@ const navbarToggle = document.getElementById('navbarToggle');
 const navMenu = document.getElementById('navMenu');
 const navLinks = document.querySelectorAll('.nav-link');
 
+let beatsData = [];
 let currentBeat = null;
 
 // Initialize the application
-function init() {
-    renderBeats('all');
-    setupEventListeners();
+async function init() {
+    try {
+        await loadBeats();
+        renderBeats('all');
+        setupEventListeners();
+    } catch (error) {
+        console.error('Failed to initialize application:', error);
+        displayErrorMessage('Unable to load the beat catalog. Please refresh the page.');
+    }
+}
+
+// Load beats from JSON file
+async function loadBeats() {
+    try {
+        const response = await fetch('/beats.json');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        beatsData = await response.json();
+        console.log(`Loaded ${beatsData.length} beats from catalog`);
+    } catch (error) {
+        console.error('Error loading beats:', error);
+        throw error;
+    }
+}
+
+// Display error message in the beats grid
+function displayErrorMessage(message) {
+    beatsGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-secondary);">
+            <i class="fas fa-exclamation-circle" style="font-size: 3rem; color: var(--accent-color); margin-bottom: 1rem;"></i>
+            <p style="font-size: 1.1rem;">${message}</p>
+        </div>
+    `;
 }
 
 // Render beats based on filter
@@ -98,6 +60,15 @@ function renderBeats(filter) {
     const filteredBeats = filter === 'all' 
         ? beatsData 
         : beatsData.filter(beat => beat.category === filter);
+
+    if (filteredBeats.length === 0) {
+        beatsGrid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-secondary);">
+                <p style="font-size: 1.1rem;">No beats found in this genre.</p>
+            </div>
+        `;
+        return;
+    }
 
     filteredBeats.forEach(beat => {
         const beatCard = createBeatCard(beat);
@@ -134,7 +105,7 @@ function createBeatCard(beat) {
                     ${beat.key}
                 </span>
             </div>
-            <div class="beat-price">${beat.price}</div>
+            <div class="beat-price">₦${beat.price.toLocaleString()}</div>
             <button class="buy-btn" data-beat-id="${beat.id}">
                 <i class="fas fa-shopping-cart"></i> Buy Beat
             </button>
@@ -164,7 +135,7 @@ function openPlayer(beat) {
     document.getElementById('playerBeatKey').textContent = beat.key;
     document.getElementById('playerBeatArt').src = beat.artwork;
 
-    audioPlayer.src = beat.audioFile;
+    audioPlayer.src = beat.previewAudio;
     playerModal.classList.add('active');
     audioPlayer.play();
     updatePlayButton();
@@ -181,7 +152,7 @@ function closePlayerModal() {
 function handleBuyBeat(beat) {
     // TODO: Integrate with Paystack payment gateway
     console.log('Buy button clicked for beat:', beat.title);
-    alert(`Ready to purchase: ${beat.title}\n\nPrice: ${beat.price}\n\nPaystack integration coming soon...`);
+    alert(`Ready to purchase: ${beat.title}\n\nPrice: ₦${beat.price.toLocaleString()}\n\nPaystack integration coming soon...`);
 }
 
 // Setup event listeners
