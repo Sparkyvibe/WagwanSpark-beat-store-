@@ -99,7 +99,7 @@
             </div>
             <div class="player-volume">
                 <i class="fas fa-volume-down"></i>
-                <input type="range" id="volumeControl" min="0" max="100" value="100" class="volume-slider">
+                <input type="range" id="volumeControl" min="0" max="100" value="100" step="1" class="volume-slider" oninput="audioPlayer.volume = this.value / 100">
                 <i class="fas fa-volume-up"></i>
             </div>
         </div>
