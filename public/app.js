@@ -18,7 +18,20 @@ const BEATS_CATALOG = [
   description: "Afrobeat instrumental",
   available: true,
   featured: true
- },
+ },  
+  {
+    id: "phenomenal",
+    title: "PHENOMENAL",
+    genre: "Afrobeat",
+    bpm: 124,
+    key: "A Minor",
+    price: 15000,
+    artwork: "/images/phenomenal.JPEG",
+    previewAudio: "/audio/phenomenal-preview.mp3",
+    description: "Afrobeat instrumental",
+    available: true,
+    featured: true
+  }
 ];
 
 // ==========================================
