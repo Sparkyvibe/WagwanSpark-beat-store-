@@ -443,7 +443,9 @@ function setupEventListeners() {
   playBtn.addEventListener('click', togglePlay);
   progressInput.addEventListener('change', seek);
   progressInput.addEventListener('input', seek);
-  volumeControl.addEventListener('input', changeVolume);
+  volumeControl.addEventListener('input', () => {
+  audioPlayer.volume = Number(volumeControl.value) / 100;
+});
 
   // Audio events
   audioPlayer.addEventListener('timeupdate', updateProgress);
