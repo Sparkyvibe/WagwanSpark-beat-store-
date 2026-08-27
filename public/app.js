@@ -356,7 +356,6 @@ function openPlayer(beat) {
   document.getElementById('playerBeatArt').src = beat.artwork;
 
   audioPlayer.src = beat.previewAudio;
-  audioPlayer.volume = 0.5;
   playerModal.classList.add('active');
   audioPlayer.play();
   updatePlayButton();
@@ -417,7 +416,8 @@ function handleAudioEnd() {
 }
 
 function changeVolume() {
-  audioPlayer.volume = volumeControl.value / 100;
+  const value = parseInt(volumeControl.value, 10);
+  audioPlayer.volume = value / 100;
 }
 
 // ==========================================
