@@ -356,6 +356,7 @@ function openPlayer(beat) {
   document.getElementById('playerBeatArt').src = beat.artwork;
 
   audioPlayer.src = beat.previewAudio;
+  audioPlayer.volume = 0.5;
   playerModal.classList.add('active');
   audioPlayer.play();
   updatePlayButton();
