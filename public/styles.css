@@ -316,8 +316,7 @@ button {
 .beat-artwork img {
     width: 100%;
     height: 100%;
-    object-fit: contain;
-    background-color: var(--secondary-color);
+    object-fit: cover;
 }
 
 .play-overlay {
