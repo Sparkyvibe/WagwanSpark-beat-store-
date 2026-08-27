@@ -356,9 +356,10 @@ function openPlayer(beat) {
   document.getElementById('playerBeatArt').src = beat.artwork;
 
   audioPlayer.src = beat.previewAudio;
-audioPlayer.volume = Number(volumeControl.value) / 100;
-playerModal.classList.add('active');
-audioPlayer.play();
+  playerModal.classList.add('active');
+  audioPlayer.play();
+  updatePlayButton();
+}
 
 function closePlayerModal() {
   playerModal.classList.remove('active');
@@ -415,8 +416,7 @@ function handleAudioEnd() {
 }
 
 function changeVolume() {
-  const volume = Number(volumeControl.value) / 100;
-  audioPlayer.volume = volume;
+  audioPlayer.volume = volumeControl.value / 100;
 }
 
 // ==========================================
@@ -444,7 +444,6 @@ function setupEventListeners() {
   progressInput.addEventListener('change', seek);
   progressInput.addEventListener('input', seek);
   volumeControl.addEventListener('input', changeVolume);
-  volumeControl.addEventListener('change', changeVolume);
 
   // Audio events
   audioPlayer.addEventListener('timeupdate', updateProgress);
