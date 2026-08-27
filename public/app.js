@@ -356,10 +356,9 @@ function openPlayer(beat) {
   document.getElementById('playerBeatArt').src = beat.artwork;
 
   audioPlayer.src = beat.previewAudio;
-  playerModal.classList.add('active');
-  audioPlayer.play();
-  updatePlayButton();
-}
+audioPlayer.volume = Number(volumeControl.value) / 100;
+playerModal.classList.add('active');
+audioPlayer.play();
 
 function closePlayerModal() {
   playerModal.classList.remove('active');
@@ -416,7 +415,8 @@ function handleAudioEnd() {
 }
 
 function changeVolume() {
-  audioPlayer.volume = volumeControl.value / 100;
+  const volume = Number(volumeControl.value) / 100;
+  audioPlayer.volume = volume;
 }
 
 // ==========================================
@@ -444,6 +444,7 @@ function setupEventListeners() {
   progressInput.addEventListener('change', seek);
   progressInput.addEventListener('input', seek);
   volumeControl.addEventListener('input', changeVolume);
+  volumeControl.addEventListener('change', changeVolume);
 
   // Audio events
   audioPlayer.addEventListener('timeupdate', updateProgress);
