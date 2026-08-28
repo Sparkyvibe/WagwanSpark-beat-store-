@@ -1,4 +1,4 @@
-// ==========================================
+hi// ==========================================
 // BEAT CATALOG DATA
 // ==========================================
 // Add new beats here to automatically populate the catalog.
@@ -615,21 +615,47 @@ function handleAudioEnd() {
 // PURCHASE HANDLING
 // ==========================================
 
-function handleBuyBeat(beat) {
-  // Paystack integration will be added later.
+async function handleBuyBeat(beat) {
+  const email = prompt(`Enter your email to purchase "${beat.title}":`);
 
-  console.log(
-    'Buy button clicked for beat:',
-    beat.id,
-    beat.title,
-    beat.price
-  );
+  if (!email) {
+    return;
+  }
 
-  alert(
-    `Ready to purchase: ${beat.title}\n\n` +
-    `Price: ₦${beat.price.toLocaleString()}\n\n` +
-    `Paystack integration coming soon...`
-  );
+  if (!email.includes('@')) {
+    alert('Please enter a valid email address.');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/create-payment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: email,
+        beatId: beat.id,
+        beatTitle: beat.title,
+        amount: beat.price
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.status || !result.data?.authorization_url) {
+      console.error('Paystack error:', result);
+      alert('Unable to start payment. Please try again.');
+      return;
+    }
+
+    // Send customer to Paystack checkout
+    window.location.href = result.data.authorization_url;
+
+  } catch (error) {
+    console.error('Payment error:', error);
+    alert('Something went wrong. Please try again.');
+  }
 }
 
 // ==========================================
