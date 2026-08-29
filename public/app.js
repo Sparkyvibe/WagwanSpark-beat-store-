@@ -30,6 +30,20 @@ const BEATS_CATALOG = [
     description: "Afrobeat instrumental",
     available: true,
     featured: true
+  },
+
+  {
+    id: "serenade",
+    title: "SERENADE",
+    genre: "Afrobeat",
+    bpm: 118,
+    key: "A Minor",
+    price: 50,
+    artwork: "/images/serenade.JPEG",
+    previewAudio: "/audio/serenade-preview.mp3",
+    description: "Afrobeat instrumental",
+    available: true,
+    featured: true
   }
 ];
 
