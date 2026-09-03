@@ -1,1 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Successful — WagwanSpark</title>
 
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: #080808;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 520px;
+      padding: 45px 30px;
+      text-align: center;
+      border: 1px solid #292929;
+      border-radius: 20px;
+      background: #111;
+    }
+
+    .icon {
+      font-size: 55px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 32px;
+    }
+
+    p {
+      color: #aaa;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+
+    .beat {
+      color: #fff;
+      font-weight: bold;
+    }
+
+    .download {
+      display: inline-block;
+      padding: 15px 28px;
+      border-radius: 10px;
+      background: #fff;
+      color: #000;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    .download:hover {
+      opacity: 0.9;
+    }
+
+    .error {
+      color: #ff7777;
+    }
+
+    .loading {
+      color: #aaa;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="card" id="content">
+    <div class="icon">⏳</div>
+    <h1>Verifying Payment</h1>
+    <p class="loading">
+      Please wait while we confirm your payment...
+    </p>
+  </div>
+
+  <script>
+    async function verifyPayment() {
+      const params = new URLSearchParams(window.location.search);
+      const reference = params.get("reference");
+
+      const content = document.getElementById("content");
+
+      if (!reference) {
+        content.innerHTML = `
+          <div class="icon">⚠️</div>
+          <h1>Payment Reference Missing</h1>
+          <p class="error">
+            We couldn't find your payment reference.
+          </p>
+        `;
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          "/api/verify-payment?reference=" +
+          encodeURIComponent(reference)
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.error || "Payment verification failed"
+          );
+        }
+
+        content.innerHTML = `
+          <div class="icon">🎉</div>
+
+          <h1>Payment Successful</h1>
+
+          <p>
+            Your purchase of
+            <span class="beat">${result.beatTitle}</span>
+            is confirmed.
+            <br><br>
+            Your beat is ready for download.
+          </p>
+
+          <a
+            class="download"
+            href="${result.downloadUrl}"
+          >
+            DOWNLOAD ZIP
+          </a>
+
+          <p style="font-size:13px; margin-top:25px;">
+            Keep this page until your download is complete.
+          </p>
+        `;
+
+      } catch (error) {
+        console.error(error);
+
+        content.innerHTML = `
+          <div class="icon">⚠️</div>
+
+          <h1>Payment Verification Failed</h1>
+
+          <p class="error">
+            We couldn't verify the payment right now.
+            Please don't pay again.
+          </p>
+
+          <p style="font-size:13px;">
+            If money was deducted from your account,
+            contact WagwanSpark with your Paystack reference.
+          </p>
+        `;
+      }
+    }
+
+    verifyPayment();
+  </script>
+
+</body>
+</html>
