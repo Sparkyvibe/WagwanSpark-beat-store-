@@ -18,11 +18,11 @@ const BEAT_FILES = {
   },
 
   "serenade": {
-    title: "SERENADE",
-    price: 50,
-    candidates: [
-      "beats/serenade.zip",
-      "serenade.zip"
+  title: "SERENADE",
+  price: 50,
+  candidates: [
+    "beats/SERENADE.zip",
+    "SERENADE.zip"
     ]
   }
 };
