@@ -1,675 +1,786 @@
 // ==========================================
-// BEAT FILE CONFIGURATION
+// BEAT CATALOG DATA
+// ==========================================
+// Add new beats here to automatically populate the catalog.
+
+const BEATS_CATALOG = [
+  {
+    id: "sun-fire",
+    title: "SUN FIRE",
+    genre: "Afrobeat",
+    bpm: 105,
+    key: "A Minor",
+    price: 15000,
+    artwork: "/images/sun-fire.jpg",
+    previewAudio: "/audio/sun-fire-preview.mp3",
+    description: "Afrobeat instrumental",
+    available: true,
+    featured: true
+  },
+
+  {
+    id: "phenomenal",
+    title: "PHENOMENAL",
+    genre: "Afrobeat",
+    bpm: 124,
+    key: "A Minor",
+    price: 15000,
+    artwork: "/images/phenomenal.JPEG",
+    previewAudio: "/audio/phenomenal-preview.mp3",
+    description: "Afrobeat instrumental",
+    available: true,
+    featured: true
+  },
+
+  {
+    id: "serenade",
+    title: "SERENADE",
+    genre: "Afrobeat",
+    bpm: 118,
+    key: "A Minor",
+    price: 50,
+    artwork: "/images/serenade.JPEG",
+    previewAudio: "/audio/serenade-preview.mp3",
+    description: "Afrobeat instrumental",
+    available: true,
+    featured: true
+  }
+];
+
+// ==========================================
+// APPLICATION STATE
 // ==========================================
 
-const BEAT_FILES = {
-  "sun-fire": {
-    title: "SUN FIRE",
-    price: 15000,
-    candidates: [
-      "beats/sun-fire.zip",
-      "sun-fire.zip"
-    ]
-  },
-
-  "phenomenal": {
-    title: "PHENOMENAL",
-    price: 15000,
-    candidates: [
-      "beats/phenomenal.zip",
-      "phenomenal.zip"
-    ]
-  },
-
-  "serenade": {
-    title: "SERENADE",
-    price: 50,
-    candidates: [
-      "beats/serenade.zip",
-      "serenade.zip"
-    ]
-  }
+const state = {
+  allBeats: [...BEATS_CATALOG],
+  filteredBeats: [...BEATS_CATALOG],
+  currentPage: 1,
+  beatsPerPage: 24,
+  selectedGenre: 'all',
+  searchQuery: '',
+  currentBeat: null,
+  availableGenres: []
 };
 
-
 // ==========================================
-// PAYSTACK CALLBACK
-// ==========================================
-
-const CALLBACK_URL =
-  "https://wagwanspark-beat-store.taiyeowoyemi.workers.dev/success.html";
-
-
-// ==========================================
-// JSON RESPONSE HELPER
+// DOM ELEMENTS
 // ==========================================
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Cache-Control": "no-store"
+const beatsGrid = document.getElementById('beatsGrid');
+const filterButtonsContainer = document.querySelector('.filter-buttons');
+const beatSearchInput = document.getElementById('beatSearch');
+const playerModal = document.getElementById('playerModal');
+const closePlayer = document.getElementById('closePlayer');
+const audioPlayer = document.getElementById('audioPlayer');
+const playBtn = document.getElementById('playBtn');
+const progressInput = document.getElementById('progressInput');
+const currentTimeEl = document.getElementById('currentTime');
+const durationEl = document.getElementById('duration');
+const navbarToggle = document.getElementById('navbarToggle');
+const navMenu = document.getElementById('navMenu');
+const navLinks = document.querySelectorAll('.nav-link');
+
+// ==========================================
+// INITIALIZATION
+// ==========================================
+
+function init() {
+  try {
+    state.allBeats = BEATS_CATALOG.filter(beat => beat.available);
+    buildAvailableGenres();
+    renderFilterButtons();
+    applyFilters();
+    renderBeats();
+    setupEventListeners();
+
+    console.log(`Loaded ${state.allBeats.length} beats from catalog`);
+  } catch (error) {
+    console.error('Failed to initialize application:', error);
+    displayErrorMessage('Unable to load the beat catalog. Please refresh the page.');
+  }
+}
+
+// ==========================================
+// GENRE MANAGEMENT
+// ==========================================
+
+function buildAvailableGenres() {
+  const genreSet = new Set();
+
+  state.allBeats.forEach(beat => {
+    genreSet.add(beat.genre);
+  });
+
+  state.availableGenres = Array.from(genreSet).sort();
+}
+
+function renderFilterButtons() {
+  const genreOptions = [
+    { key: 'all', label: 'All' },
+    { key: 'Hip-Hop', label: 'Hip-Hop' },
+    { key: 'Trap', label: 'Trap' },
+    { key: 'R&B', label: 'R&B' },
+    { key: 'Afrobeat', label: 'Afrobeat' },
+    { key: 'Afro Fusion', label: 'Afro Fusion' },
+    { key: 'Afro House', label: 'Afro House' },
+    { key: 'Amapiano', label: 'Amapiano' }
+  ];
+
+  filterButtonsContainer.innerHTML = '';
+
+  genreOptions.forEach(option => {
+    if (
+      option.key !== 'all' &&
+      !state.availableGenres.includes(option.key)
+    ) {
+      return;
     }
+
+    const button = document.createElement('button');
+
+    button.className =
+      `filter-btn ${
+        option.key === state.selectedGenre ? 'active' : ''
+      }`;
+
+    button.dataset.filter = option.key;
+    button.textContent = option.label;
+
+    button.addEventListener('click', () => {
+      state.selectedGenre = option.key;
+      state.currentPage = 1;
+
+      updateFilterButtons();
+      applyFilters();
+      renderBeats();
+
+      beatsGrid.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    });
+
+    filterButtonsContainer.appendChild(button);
   });
 }
 
-
-// ==========================================
-// BASE64 URL HELPERS
-// ==========================================
-
-function base64url(bytes) {
-  let binary = "";
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
-
-
-function base64urlDecode(value) {
-  value = value
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-
-  while (value.length % 4) {
-    value += "=";
-  }
-
-  const binary = atob(value);
-
-  const bytes = new Uint8Array(binary.length);
-
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  return bytes;
-}
-
-
-// ==========================================
-// HMAC SIGNATURE
-// ==========================================
-
-async function createSignature(payload, secret) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    {
-      name: "HMAC",
-      hash: "SHA-256"
-    },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(payload)
-  );
-
-  return base64url(new Uint8Array(signature));
-}
-
-
-// ==========================================
-// CREATE DOWNLOAD TOKEN
-// ==========================================
-
-async function createDownloadToken(data, secret) {
-  const payload = base64url(
-    new TextEncoder().encode(
-      JSON.stringify(data)
-    )
-  );
-
-  const signature = await createSignature(
-    payload,
-    secret
-  );
-
-  return `${payload}.${signature}`;
-}
-
-
-// ==========================================
-// VERIFY DOWNLOAD TOKEN
-// ==========================================
-
-async function verifyDownloadToken(token, secret) {
-  const parts = token.split(".");
-
-  if (parts.length !== 2) {
-    return null;
-  }
-
-  const [payload, signature] = parts;
-
-  const expectedSignature =
-    await createSignature(
-      payload,
-      secret
+function updateFilterButtons() {
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle(
+      'active',
+      btn.dataset.filter === state.selectedGenre
     );
+  });
+}
 
-  if (signature !== expectedSignature) {
-    return null;
+// ==========================================
+// SEARCH AND FILTER
+// ==========================================
+
+function applyFilters() {
+  let filtered = [...state.allBeats];
+
+  if (state.selectedGenre !== 'all') {
+    filtered = filtered.filter(
+      beat => beat.genre === state.selectedGenre
+    );
+  }
+
+  if (state.searchQuery.trim()) {
+    const query = state.searchQuery.toLowerCase();
+
+    filtered = filtered.filter(beat => {
+      return (
+        beat.title.toLowerCase().includes(query) ||
+        beat.genre.toLowerCase().includes(query) ||
+        beat.key.toLowerCase().includes(query) ||
+        beat.bpm.toString().includes(query) ||
+        beat.description.toLowerCase().includes(query)
+      );
+    });
+  }
+
+  state.filteredBeats = filtered;
+  state.currentPage = 1;
+}
+
+function handleSearch(query) {
+  state.searchQuery = query;
+  applyFilters();
+  renderBeats();
+}
+
+// ==========================================
+// PAGINATION
+// ==========================================
+
+function getPaginatedBeats() {
+  const startIndex =
+    (state.currentPage - 1) * state.beatsPerPage;
+
+  const endIndex =
+    startIndex + state.beatsPerPage;
+
+  return state.filteredBeats.slice(
+    startIndex,
+    endIndex
+  );
+}
+
+function getTotalPages() {
+  return Math.ceil(
+    state.filteredBeats.length /
+    state.beatsPerPage
+  );
+}
+
+// ==========================================
+// RENDERING
+// ==========================================
+
+function renderBeats() {
+  beatsGrid.innerHTML = '';
+
+  if (state.filteredBeats.length === 0) {
+    displayNoResultsMessage();
+    return;
+  }
+
+  const paginatedBeats = getPaginatedBeats();
+
+  paginatedBeats.forEach(beat => {
+    const beatCard = createBeatCard(beat);
+    beatsGrid.appendChild(beatCard);
+  });
+
+  const totalPages = getTotalPages();
+
+  if (totalPages > 1) {
+    renderPaginationControls(totalPages);
+  }
+}
+
+function createBeatCard(beat) {
+  const card = document.createElement('div');
+
+  card.className = 'beat-card';
+
+  card.innerHTML = `
+    <div class="beat-artwork">
+      <img
+        src="${beat.artwork}"
+        alt="${escapeHtml(beat.title)}"
+        onerror="this.src='/images/placeholder.jpg'"
+      >
+
+      <div class="play-overlay">
+        <div class="play-btn-overlay">
+          <i class="fas fa-play"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="beat-info">
+      <h3 class="beat-title">
+        ${escapeHtml(beat.title)}
+      </h3>
+
+      <div class="beat-meta">
+        <span class="beat-meta-item">
+          <i class="fas fa-music"></i>
+          ${escapeHtml(beat.genre)}
+        </span>
+
+        <span class="beat-meta-item">
+          <i class="fas fa-tachometer-alt"></i>
+          ${beat.bpm} BPM
+        </span>
+
+        <span class="beat-meta-item">
+          <i class="fas fa-key"></i>
+          ${escapeHtml(beat.key)}
+        </span>
+      </div>
+
+      <div class="beat-price">
+        ₦${beat.price.toLocaleString()}
+      </div>
+
+      <button
+        class="buy-btn"
+        data-beat-id="${beat.id}"
+      >
+        <i class="fas fa-shopping-cart"></i>
+        Buy Beat
+      </button>
+    </div>
+  `;
+
+  card
+    .querySelector('.play-overlay')
+    .addEventListener('click', () => {
+      openPlayer(beat);
+    });
+
+  card
+    .querySelector('.buy-btn')
+    .addEventListener('click', event => {
+      event.stopPropagation();
+      handleBuyBeat(beat);
+    });
+
+  return card;
+}
+
+// ==========================================
+// PAGINATION CONTROLS
+// ==========================================
+
+function renderPaginationControls(totalPages) {
+  const paginationContainer =
+    document.createElement('div');
+
+  paginationContainer.className =
+    'pagination-controls';
+
+  paginationContainer.style.cssText = `
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem 0;
+    color: var(--text-secondary);
+  `;
+
+  const prevBtn =
+    document.createElement('button');
+
+  prevBtn.textContent = '← Previous';
+
+  prevBtn.disabled =
+    state.currentPage === 1;
+
+  prevBtn.style.cssText = `
+    padding: 0.5rem 1rem;
+    background: ${
+      state.currentPage === 1
+        ? 'var(--lighter-bg)'
+        : 'var(--primary-color)'
+    };
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: ${
+      state.currentPage === 1
+        ? 'not-allowed'
+        : 'pointer'
+    };
+    opacity: ${
+      state.currentPage === 1
+        ? '0.5'
+        : '1'
+    };
+  `;
+
+  prevBtn.addEventListener('click', () => {
+    if (state.currentPage > 1) {
+      state.currentPage--;
+      renderBeats();
+
+      beatsGrid.scrollIntoView({
+        behavior: 'smooth'
+      });
+    }
+  });
+
+  const pageInfo =
+    document.createElement('span');
+
+  pageInfo.textContent =
+    `Page ${state.currentPage} of ${totalPages}`;
+
+  const nextBtn =
+    document.createElement('button');
+
+  nextBtn.textContent = 'Next →';
+
+  nextBtn.disabled =
+    state.currentPage === totalPages;
+
+  nextBtn.style.cssText = `
+    padding: 0.5rem 1rem;
+    background: ${
+      state.currentPage === totalPages
+        ? 'var(--lighter-bg)'
+        : 'var(--primary-color)'
+    };
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: ${
+      state.currentPage === totalPages
+        ? 'not-allowed'
+        : 'pointer'
+    };
+    opacity: ${
+      state.currentPage === totalPages
+        ? '0.5'
+        : '1'
+    };
+  `;
+
+  nextBtn.addEventListener('click', () => {
+    if (state.currentPage < totalPages) {
+      state.currentPage++;
+      renderBeats();
+
+      beatsGrid.scrollIntoView({
+        behavior: 'smooth'
+      });
+    }
+  });
+
+  paginationContainer.appendChild(prevBtn);
+  paginationContainer.appendChild(pageInfo);
+  paginationContainer.appendChild(nextBtn);
+
+  beatsGrid.appendChild(
+    paginationContainer
+  );
+}
+
+// ==========================================
+// MESSAGES
+// ==========================================
+
+function displayNoResultsMessage() {
+  beatsGrid.innerHTML = `
+    <div style="
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-secondary);
+    ">
+      <i
+        class="fas fa-search"
+        style="
+          font-size: 3rem;
+          color: var(--accent-color);
+          margin-bottom: 1rem;
+        "
+      ></i>
+
+      <p style="font-size: 1.1rem;">
+        No beats found.
+        Try adjusting your search or filters.
+      </p>
+    </div>
+  `;
+}
+
+function displayErrorMessage(message) {
+  beatsGrid.innerHTML = `
+    <div style="
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-secondary);
+    ">
+      <i
+        class="fas fa-exclamation-circle"
+        style="
+          font-size: 3rem;
+          color: var(--accent-color);
+          margin-bottom: 1rem;
+        "
+      ></i>
+
+      <p style="font-size: 1.1rem;">
+        ${escapeHtml(message)}
+      </p>
+    </div>
+  `;
+}
+
+// ==========================================
+// AUDIO PLAYER
+// ==========================================
+
+function openPlayer(beat) {
+  state.currentBeat = beat;
+
+  document.getElementById(
+    'playerBeatTitle'
+  ).textContent = beat.title;
+
+  document.getElementById(
+    'playerBeatGenre'
+  ).textContent = beat.genre;
+
+  document.getElementById(
+    'playerBeatBPM'
+  ).textContent = beat.bpm;
+
+  document.getElementById(
+    'playerBeatKey'
+  ).textContent = beat.key;
+
+  document.getElementById(
+    'playerBeatArt'
+  ).src = beat.artwork;
+
+  audioPlayer.src = beat.previewAudio;
+
+  playerModal.classList.add('active');
+
+  audioPlayer.play();
+
+  updatePlayButton();
+}
+
+function closePlayerModal() {
+  playerModal.classList.remove('active');
+
+  audioPlayer.pause();
+
+  updatePlayButton();
+}
+
+function togglePlay() {
+  if (audioPlayer.paused) {
+    audioPlayer.play();
+  } else {
+    audioPlayer.pause();
+  }
+
+  updatePlayButton();
+}
+
+function updatePlayButton() {
+  if (audioPlayer.paused) {
+    playBtn.innerHTML =
+      '<i class="fas fa-play"></i>';
+  } else {
+    playBtn.innerHTML =
+      '<i class="fas fa-pause"></i>';
+  }
+}
+
+function seek() {
+  if (!audioPlayer.duration) {
+    return;
+  }
+
+  const seekTime =
+    (progressInput.value / 100) *
+    audioPlayer.duration;
+
+  audioPlayer.currentTime = seekTime;
+}
+
+function updateProgress() {
+  if (audioPlayer.duration) {
+    const progress =
+      (audioPlayer.currentTime /
+        audioPlayer.duration) *
+      100;
+
+    document.getElementById(
+      'progress'
+    ).style.width = progress + '%';
+
+    progressInput.value = progress;
+
+    currentTimeEl.textContent =
+      formatTime(audioPlayer.currentTime);
+  }
+}
+
+function updateDuration() {
+  durationEl.textContent =
+    formatTime(audioPlayer.duration);
+
+  progressInput.max = 100;
+}
+
+function formatTime(seconds) {
+  if (isNaN(seconds)) {
+    return '0:00';
+  }
+
+  const minutes =
+    Math.floor(seconds / 60);
+
+  const secs =
+    Math.floor(seconds % 60);
+
+  return `${minutes}:${secs
+    .toString()
+    .padStart(2, '0')}`;
+}
+
+function handleAudioEnd() {
+  audioPlayer.currentTime = 0;
+  updatePlayButton();
+}
+
+// ==========================================
+// PURCHASE HANDLING
+// ==========================================
+
+async function handleBuyBeat(beat) {
+  const email = prompt(`Enter your email to purchase "${beat.title}":`);
+
+  if (!email) {
+    return;
+  }
+
+  if (!email.includes('@')) {
+    alert('Please enter a valid email address.');
+    return;
   }
 
   try {
-    const data = JSON.parse(
-      new TextDecoder().decode(
-        base64urlDecode(payload)
-      )
-    );
+    const response = await fetch('/api/create-payment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: email,
+        beatId: beat.id,
+        beatTitle: beat.title,
+        amount: beat.price
+      })
+    });
 
-    if (!data.exp) {
-      return null;
+    const result = await response.json();
+
+    if (!response.ok || !result.status || !result.data?.authorization_url) {
+      console.error('Paystack error:', result);
+      alert('Unable to start payment. Please try again.');
+      return;
     }
 
-    if (Date.now() > data.exp) {
-      return null;
-    }
+    // Send customer to Paystack checkout
+    window.location.href = result.data.authorization_url;
 
-    return data;
-
-  } catch {
-    return null;
+  } catch (error) {
+    console.error('Payment error:', error);
+    alert('Something went wrong. Please try again.');
   }
 }
 
-
 // ==========================================
-// WORKER
+// EVENT LISTENERS
 // ==========================================
 
-export default {
-
-  async fetch(request, env) {
-
-    const url = new URL(request.url);
-
-
-    // ==========================================
-    // CREATE PAYSTACK PAYMENT
-    // ==========================================
-
-    if (
-      url.pathname === "/api/create-payment" &&
-      request.method === "POST"
-    ) {
-
-      try {
-
-        const data = await request.json();
-
-        const email = data.email;
-        const beatId = data.beatId;
-
-        if (!email || !beatId) {
-          return json(
-            {
-              error:
-                "Missing payment information"
-            },
-            400
-          );
-        }
-
-
-        const beat =
-          BEAT_FILES[beatId];
-
-
-        if (!beat) {
-          return json(
-            {
-              error:
-                "Beat not found"
-            },
-            404
-          );
-        }
-
-
-        const paystackResponse =
-          await fetch(
-            "https://api.paystack.co/transaction/initialize",
-            {
-              method: "POST",
-
-              headers: {
-                Authorization:
-                  `Bearer ${env.PAYSTACK_SECRET_KEY}`,
-
-                "Content-Type":
-                  "application/json"
-              },
-
-              body: JSON.stringify({
-
-                email: email,
-
-                amount:
-                  beat.price * 100,
-
-                currency:
-                  "NGN",
-
-                callback_url:
-                  CALLBACK_URL,
-
-                metadata: {
-
-                  beatId:
-                    beatId,
-
-                  beatTitle:
-                    beat.title
-
-                }
-
-              })
-            }
-          );
-
-
-        const result =
-          await paystackResponse.json();
-
-
-        return json(
-          result,
-          paystackResponse.status
-        );
-
-
-      } catch (error) {
-
-        console.error(
-          "Payment initialization error:",
-          error
-        );
-
-        return json(
-          {
-            error:
-              "Payment initialization failed"
-          },
-          500
-        );
-      }
+function setupEventListeners() {
+  beatSearchInput.addEventListener(
+    'input',
+    event => {
+      handleSearch(event.target.value);
     }
+  );
 
+  closePlayer.addEventListener(
+    'click',
+    closePlayerModal
+  );
 
+  playBtn.addEventListener(
+    'click',
+    togglePlay
+  );
 
-    // ==========================================
-    // VERIFY PAYMENT
-    // ==========================================
+  progressInput.addEventListener(
+    'change',
+    seek
+  );
 
-    if (
-      url.pathname === "/api/verify-payment" &&
-      request.method === "GET"
-    ) {
+  progressInput.addEventListener(
+    'input',
+    seek
+  );
 
-      try {
+  audioPlayer.addEventListener(
+    'timeupdate',
+    updateProgress
+  );
 
-        const reference =
-          url.searchParams.get(
-            "reference"
-          );
+  audioPlayer.addEventListener(
+    'loadedmetadata',
+    updateDuration
+  );
 
+  audioPlayer.addEventListener(
+    'ended',
+    handleAudioEnd
+  );
 
-        if (!reference) {
+  navbarToggle.addEventListener(
+    'click',
+    toggleMobileMenu
+  );
 
-          return json(
-            {
-              success: false,
-
-              error:
-                "Payment reference missing"
-            },
-            400
-          );
-        }
-
-
-        const paystackResponse =
-          await fetch(
-            `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
-            {
-              method: "GET",
-
-              headers: {
-                Authorization:
-                  `Bearer ${env.PAYSTACK_SECRET_KEY}`
-              }
-            }
-          );
-
-
-        const result =
-          await paystackResponse.json();
-
-
-        if (
-          !paystackResponse.ok ||
-          !result.status ||
-          !result.data
-        ) {
-
-          return json(
-            {
-              success: false,
-
-              error:
-                "Unable to verify payment"
-            },
-            400
-          );
-        }
-
-
-        const transaction =
-          result.data;
-
-
-        // Payment must actually be successful
-
-        if (
-          transaction.status !==
-          "success"
-        ) {
-
-          return json(
-            {
-              success: false,
-
-              error:
-                "Payment was not successful"
-            },
-            400
-          );
-        }
-
-
-        // ======================================
-        // GET BEAT FROM PAYMENT METADATA
-        // ======================================
-
-        const metadata =
-          transaction.metadata || {};
-
-
-        const beatId =
-          metadata.beatId;
-
-
-        const beat =
-          BEAT_FILES[beatId];
-
-
-        if (!beat) {
-
-          return json(
-            {
-              success: false,
-
-              error:
-                "Purchased beat could not be identified"
-            },
-            400
-          );
-        }
-
-
-        // ======================================
-        // CHECK PAYMENT AMOUNT
-        // ======================================
-
-        if (
-          Number(transaction.amount) <
-          beat.price * 100
-        ) {
-
-          return json(
-            {
-              success: false,
-
-              error:
-                "Payment amount is incorrect"
-            },
-            400
-          );
-        }
-
-
-        // ======================================
-        // CREATE TEMPORARY DOWNLOAD TOKEN
-        // ======================================
-
-        const token =
-          await createDownloadToken(
-            {
-              reference:
-                reference,
-
-              beatId:
-                beatId,
-
-              exp:
-                Date.now() +
-                30 * 60 * 1000
-            },
-
-            env.PAYSTACK_SECRET_KEY
-          );
-
-
-        const downloadUrl =
-          `${url.origin}/api/download?token=${encodeURIComponent(token)}`;
-
-
-        return json({
-
-          success:
-            true,
-
-          beatTitle:
-            beat.title,
-
-          downloadUrl:
-            downloadUrl
-
-        });
-
-
-      } catch (error) {
-
-        console.error(
-          "Payment verification error:",
-          error
-        );
-
-        return json(
-          {
-            success: false,
-
-            error:
-              "Payment verification failed"
-          },
-          500
-        );
+  navLinks.forEach(link => {
+    link.addEventListener(
+      'click',
+      () => {
+        navMenu.classList.remove('active');
+        navbarToggle.classList.remove('active');
       }
-    }
-
-
-
-    // ==========================================
-    // SECURE BEAT DOWNLOAD
-    // ==========================================
-
-    if (
-      url.pathname === "/api/download" &&
-      request.method === "GET"
-    ) {
-
-      try {
-
-        const token =
-          url.searchParams.get(
-            "token"
-          );
-
-
-        if (!token) {
-
-          return new Response(
-            "Download token missing",
-            {
-              status: 400
-            }
-          );
-        }
-
-
-        const data =
-          await verifyDownloadToken(
-            token,
-            env.PAYSTACK_SECRET_KEY
-          );
-
-
-        if (!data) {
-
-          return new Response(
-            "Invalid or expired download link",
-            {
-              status: 403
-            }
-          );
-        }
-
-
-        const beat =
-          BEAT_FILES[data.beatId];
-
-
-        if (!beat) {
-
-          return new Response(
-            "Beat not found",
-            {
-              status: 404
-            }
-          );
-        }
-
-
-        // ======================================
-        // FIND THE BEAT IN R2
-        // ======================================
-
-        let object = null;
-
-        for (
-          const key of beat.candidates
-        ) {
-
-          const found =
-            await env.BEATS_BUCKET.get(
-              key
-            );
-
-
-          if (found) {
-
-            object = found;
-
-            break;
-          }
-        }
-
-
-        if (!object) {
-
-          return new Response(
-            "Beat file not found in R2",
-            {
-              status: 404
-            }
-          );
-        }
-
-
-        // ======================================
-        // DOWNLOAD HEADERS
-        // ======================================
-
-        const headers =
-          new Headers();
-
-
-        object.writeHttpMetadata(
-          headers
-        );
-
-
-        headers.set(
-          "Content-Disposition",
-          `attachment; filename="${beat.title}.zip"`
-        );
-
-
-        headers.set(
-          "Cache-Control",
-          "private, no-store"
-        );
-
-
-        return new Response(
-          object.body,
-          {
-            status: 200,
-
-            headers:
-              headers
-          }
-        );
-
-
-      } catch (error) {
-
-        console.error(
-          "Download error:",
-          error
-        );
-
-        return new Response(
-          "Download failed",
-          {
-            status: 500
-          }
-        );
-      }
-    }
-
-
-
-    // ==========================================
-    // SERVE WEBSITE
-    // ==========================================
-
-    return env.ASSETS.fetch(
-      request
     );
-  }
-};
+  });
+
+  playerModal.addEventListener(
+    'click',
+    event => {
+      if (event.target === playerModal) {
+        closePlayerModal();
+      }
+    }
+  );
+}
+
+// ==========================================
+// MOBILE MENU
+// ==========================================
+
+function toggleMobileMenu() {
+  navMenu.classList.toggle('active');
+  navbarToggle.classList.toggle('active');
+}
+
+// ==========================================
+// UTILITY FUNCTIONS
+// ==========================================
+
+function escapeHtml(text) {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+
+  return text.replace(
+    /[&<>"']/g,
+    character => map[character]
+  );
+}
+
+// ==========================================
+// INITIALIZE
+// ==========================================
+
+if (document.readyState === 'loading') {
+  document.addEventListener(
+    'DOMContentLoaded',
+    init
+  );
+} else {
+  init();
+}
