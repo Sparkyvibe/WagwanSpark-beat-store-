@@ -6,6 +6,10 @@ compatibility_date = "2024-01-15"
 directory = "public"
 binding = "ASSETS"
 
+[[r2_buckets]]
+binding = "BEATS_BUCKET"
+bucket_name = "wagwanspark-beats"
+
 [env.production]
 name = "wagwanspark-beat-store-prod"
 route = "example.com/*"
