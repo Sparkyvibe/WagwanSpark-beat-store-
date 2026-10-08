@@ -1,10 +1,10 @@
 const BEAT_FILES = {
-  "sun-fire": {
+  "sun fire": {
     title: "SUN FIRE",
     price: 15000,
     candidates: [
-      "beats/sun-fire.zip",
-      "sun-fire.zip"
+      "beats/SUN FIRE.zip",
+      "SUN FIRE.zip"
     ]
   },
 
@@ -12,8 +12,8 @@ const BEAT_FILES = {
     title: "PHENOMENAL",
     price: 15000,
     candidates: [
-      "beats/phenomenal.zip",
-      "phenomenal.zip"
+      "beats/PHENOMENAL.zip",
+      "PHENOMENAL.zip"
     ]
   },
 
