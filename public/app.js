@@ -38,7 +38,7 @@ const BEATS_CATALOG = [
     genre: "Afrobeat",
     bpm: 118,
     key: "A Minor",
-    price: 50,
+    price: 15000,
     artwork: "/images/serenade.JPEG",
     previewAudio: "/audio/serenade-preview.mp3",
     description: "Afrobeat instrumental",
