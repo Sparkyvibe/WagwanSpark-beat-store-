@@ -1,7 +1,7 @@
-// ==========================================
-// BEAT CATALOG DATA
-// ==========================================
-// Add new beats here to automatically populate the catalog.
+
+ // ==========================================
+ // BEAT CATALOG DATA
+ // ==========================================
 
 const BEATS_CATALOG = [
   {
@@ -17,7 +17,6 @@ const BEATS_CATALOG = [
     available: true,
     featured: true
   },
-
   {
     id: "phenomenal",
     title: "PHENOMENAL",
@@ -31,7 +30,6 @@ const BEATS_CATALOG = [
     available: true,
     featured: true
   },
-
   {
     id: "serenade",
     title: "SERENADE",
@@ -86,17 +84,31 @@ const navLinks = document.querySelectorAll('.nav-link');
 
 function init() {
   try {
+    if (!beatsGrid || !playerModal || !audioPlayer || !playBtn) {
+      throw new Error(
+        'Required page elements are missing. Check index.html.'
+      );
+    }
+
     state.allBeats = BEATS_CATALOG.filter(beat => beat.available);
+
     buildAvailableGenres();
     renderFilterButtons();
     applyFilters();
     renderBeats();
     setupEventListeners();
 
-    console.log(`Loaded ${state.allBeats.length} beats from catalog`);
+    console.log(
+      `Loaded ${state.allBeats.length} beats from catalog`
+    );
   } catch (error) {
     console.error('Failed to initialize application:', error);
-    displayErrorMessage('Unable to load the beat catalog. Please refresh the page.');
+
+    if (beatsGrid) {
+      displayErrorMessage(
+        'Unable to load the beat catalog. Please refresh the page.'
+      );
+    }
   }
 }
 
@@ -115,6 +127,8 @@ function buildAvailableGenres() {
 }
 
 function renderFilterButtons() {
+  if (!filterButtonsContainer) return;
+
   const genreOptions = [
     { key: 'all', label: 'All' },
     { key: 'Hip-Hop', label: 'Hip-Hop' },
@@ -221,16 +235,12 @@ function getPaginatedBeats() {
   const endIndex =
     startIndex + state.beatsPerPage;
 
-  return state.filteredBeats.slice(
-    startIndex,
-    endIndex
-  );
+  return state.filteredBeats.slice(startIndex, endIndex);
 }
 
 function getTotalPages() {
   return Math.ceil(
-    state.filteredBeats.length /
-    state.beatsPerPage
+    state.filteredBeats.length / state.beatsPerPage
   );
 }
 
@@ -239,6 +249,8 @@ function getTotalPages() {
 // ==========================================
 
 function renderBeats() {
+  if (!beatsGrid) return;
+
   beatsGrid.innerHTML = '';
 
   if (state.filteredBeats.length === 0) {
@@ -266,11 +278,12 @@ function createBeatCard(beat) {
   card.className = 'beat-card';
 
   card.innerHTML = `
-    <div class="beat-artwork">
+    <div class="beat-artwork" role="button" tabindex="0"
+         aria-label="Play ${escapeHtml(beat.title)} preview">
       <img
         src="${beat.artwork}"
         alt="${escapeHtml(beat.title)}"
-        onerror="this.src='/images/placeholder.jpg'"
+        onerror="this.onerror=null;this.src='/images/placeholder.jpg'"
       >
 
       <div class="play-overlay">
@@ -309,6 +322,7 @@ function createBeatCard(beat) {
       <button
         class="buy-btn"
         data-beat-id="${beat.id}"
+        type="button"
       >
         <i class="fas fa-shopping-cart"></i>
         Buy Beat
@@ -316,18 +330,26 @@ function createBeatCard(beat) {
     </div>
   `;
 
-  card
-    .querySelector('.play-overlay')
-    .addEventListener('click', () => {
-      openPlayer(beat);
-    });
+  // FIX: Make the entire artwork clickable.
+  // This works even when CSS hides the play overlay on mobile.
+  const artwork = card.querySelector('.beat-artwork');
 
-  card
-    .querySelector('.buy-btn')
-    .addEventListener('click', event => {
-      event.stopPropagation();
-      handleBuyBeat(beat);
-    });
+  artwork.addEventListener('click', () => {
+    openPlayer(beat);
+  });
+
+  artwork.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openPlayer(beat);
+    }
+  });
+
+  // Keep the purchase button independent from playback.
+  card.querySelector('.buy-btn').addEventListener('click', event => {
+    event.stopPropagation();
+    handleBuyBeat(beat);
+  });
 
   return card;
 }
@@ -337,11 +359,9 @@ function createBeatCard(beat) {
 // ==========================================
 
 function renderPaginationControls(totalPages) {
-  const paginationContainer =
-    document.createElement('div');
+  const paginationContainer = document.createElement('div');
 
-  paginationContainer.className =
-    'pagination-controls';
+  paginationContainer.className = 'pagination-controls';
 
   paginationContainer.style.cssText = `
     grid-column: 1 / -1;
@@ -353,13 +373,10 @@ function renderPaginationControls(totalPages) {
     color: var(--text-secondary);
   `;
 
-  const prevBtn =
-    document.createElement('button');
+  const prevBtn = document.createElement('button');
 
   prevBtn.textContent = '← Previous';
-
-  prevBtn.disabled =
-    state.currentPage === 1;
+  prevBtn.disabled = state.currentPage === 1;
 
   prevBtn.style.cssText = `
     padding: 0.5rem 1rem;
@@ -371,16 +388,8 @@ function renderPaginationControls(totalPages) {
     color: white;
     border: none;
     border-radius: 4px;
-    cursor: ${
-      state.currentPage === 1
-        ? 'not-allowed'
-        : 'pointer'
-    };
-    opacity: ${
-      state.currentPage === 1
-        ? '0.5'
-        : '1'
-    };
+    cursor: ${state.currentPage === 1 ? 'not-allowed' : 'pointer'};
+    opacity: ${state.currentPage === 1 ? '0.5' : '1'};
   `;
 
   prevBtn.addEventListener('click', () => {
@@ -394,19 +403,15 @@ function renderPaginationControls(totalPages) {
     }
   });
 
-  const pageInfo =
-    document.createElement('span');
+  const pageInfo = document.createElement('span');
 
   pageInfo.textContent =
     `Page ${state.currentPage} of ${totalPages}`;
 
-  const nextBtn =
-    document.createElement('button');
+  const nextBtn = document.createElement('button');
 
   nextBtn.textContent = 'Next →';
-
-  nextBtn.disabled =
-    state.currentPage === totalPages;
+  nextBtn.disabled = state.currentPage === totalPages;
 
   nextBtn.style.cssText = `
     padding: 0.5rem 1rem;
@@ -423,11 +428,7 @@ function renderPaginationControls(totalPages) {
         ? 'not-allowed'
         : 'pointer'
     };
-    opacity: ${
-      state.currentPage === totalPages
-        ? '0.5'
-        : '1'
-    };
+    opacity: ${state.currentPage === totalPages ? '0.5' : '1'};
   `;
 
   nextBtn.addEventListener('click', () => {
@@ -445,9 +446,7 @@ function renderPaginationControls(totalPages) {
   paginationContainer.appendChild(pageInfo);
   paginationContainer.appendChild(nextBtn);
 
-  beatsGrid.appendChild(
-    paginationContainer
-  );
+  beatsGrid.appendChild(paginationContainer);
 }
 
 // ==========================================
@@ -462,18 +461,14 @@ function displayNoResultsMessage() {
       padding: 3rem;
       color: var(--text-secondary);
     ">
-      <i
-        class="fas fa-search"
-        style="
-          font-size: 3rem;
-          color: var(--accent-color);
-          margin-bottom: 1rem;
-        "
-      ></i>
+      <i class="fas fa-search" style="
+        font-size: 3rem;
+        color: var(--accent-color);
+        margin-bottom: 1rem;
+      "></i>
 
       <p style="font-size: 1.1rem;">
-        No beats found.
-        Try adjusting your search or filters.
+        No beats found. Try adjusting your search or filters.
       </p>
     </div>
   `;
@@ -487,14 +482,11 @@ function displayErrorMessage(message) {
       padding: 3rem;
       color: var(--text-secondary);
     ">
-      <i
-        class="fas fa-exclamation-circle"
-        style="
-          font-size: 3rem;
-          color: var(--accent-color);
-          margin-bottom: 1rem;
-        "
-      ></i>
+      <i class="fas fa-exclamation-circle" style="
+        font-size: 3rem;
+        color: var(--accent-color);
+        margin-bottom: 1rem;
+      "></i>
 
       <p style="font-size: 1.1rem;">
         ${escapeHtml(message)}
@@ -507,49 +499,74 @@ function displayErrorMessage(message) {
 // AUDIO PLAYER
 // ==========================================
 
-function openPlayer(beat) {
+async function openPlayer(beat) {
+  if (!beat || !audioPlayer || !playerModal) return;
+
   state.currentBeat = beat;
 
-  document.getElementById(
-    'playerBeatTitle'
-  ).textContent = beat.title;
+  document.getElementById('playerBeatTitle').textContent = beat.title;
+  document.getElementById('playerBeatGenre').textContent = beat.genre;
+  document.getElementById('playerBeatBPM').textContent = beat.bpm;
+  document.getElementById('playerBeatKey').textContent = beat.key;
 
-  document.getElementById(
-    'playerBeatGenre'
-  ).textContent = beat.genre;
+  const playerArt = document.getElementById('playerBeatArt');
+  playerArt.src = beat.artwork;
+  playerArt.alt = beat.title;
 
-  document.getElementById(
-    'playerBeatBPM'
-  ).textContent = beat.bpm;
-
-  document.getElementById(
-    'playerBeatKey'
-  ).textContent = beat.key;
-
-  document.getElementById(
-    'playerBeatArt'
-  ).src = beat.artwork;
-
+  // Reset the previous track and its progress.
+  audioPlayer.pause();
+  audioPlayer.currentTime = 0;
   audioPlayer.src = beat.previewAudio;
+  audioPlayer.load();
 
+  if (progressInput) progressInput.value = 0;
+  if (currentTimeEl) currentTimeEl.textContent = '0:00';
+  if (durationEl) durationEl.textContent = '0:00';
+
+  const progress = document.getElementById('progress');
+  if (progress) progress.style.width = '0%';
+
+  // Show the mini-player immediately.
   playerModal.classList.add('active');
-
-  audioPlayer.play();
-
   updatePlayButton();
+
+  // Attempt playback after opening the player.
+  try {
+    await audioPlayer.play();
+  } catch (error) {
+    console.error('Audio playback failed:', error);
+    updatePlayButton();
+
+    // The player remains visible so the user can press Play again.
+    // Check the preview file path if playback continues to fail.
+  }
 }
 
 function closePlayerModal() {
-  playerModal.classList.remove('active');
+  if (!playerModal || !audioPlayer) return;
 
+  playerModal.classList.remove('active');
   audioPlayer.pause();
 
   updatePlayButton();
 }
 
-function togglePlay() {
+async function togglePlay() {
+  if (!audioPlayer) return;
+
+  if (!audioPlayer.src) {
+    if (state.currentBeat) {
+      await openPlayer(state.currentBeat);
+    }
+    return;
+  }
+
   if (audioPlayer.paused) {
-    audioPlayer.play();
+    try {
+      await audioPlayer.play();
+    } catch (error) {
+      console.error('Unable to play audio:', error);
+    }
   } else {
     audioPlayer.pause();
   }
@@ -558,83 +575,88 @@ function togglePlay() {
 }
 
 function updatePlayButton() {
+  if (!playBtn || !audioPlayer) return;
+
   if (audioPlayer.paused) {
-    playBtn.innerHTML =
-      '<i class="fas fa-play"></i>';
+    playBtn.innerHTML = '<i class="fas fa-play"></i>';
+    playBtn.setAttribute('aria-label', 'Play preview');
   } else {
-    playBtn.innerHTML =
-      '<i class="fas fa-pause"></i>';
+    playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+    playBtn.setAttribute('aria-label', 'Pause preview');
   }
 }
 
 function seek() {
-  if (!audioPlayer.duration) {
+  if (!audioPlayer || !progressInput || !audioPlayer.duration) {
     return;
   }
 
   const seekTime =
-    (progressInput.value / 100) *
-    audioPlayer.duration;
+    (Number(progressInput.value) / 100) * audioPlayer.duration;
 
   audioPlayer.currentTime = seekTime;
 }
 
 function updateProgress() {
-  if (audioPlayer.duration) {
-    const progress =
-      (audioPlayer.currentTime /
-        audioPlayer.duration) *
-      100;
+  if (!audioPlayer || !audioPlayer.duration) return;
 
-    document.getElementById(
-      'progress'
-    ).style.width = progress + '%';
+  const progressValue =
+    (audioPlayer.currentTime / audioPlayer.duration) * 100;
 
-    progressInput.value = progress;
+  const progress = document.getElementById('progress');
 
-    currentTimeEl.textContent =
-      formatTime(audioPlayer.currentTime);
+  if (progress) {
+    progress.style.width = `${progressValue}%`;
+  }
+
+  if (progressInput) {
+    progressInput.value = progressValue;
+  }
+
+  if (currentTimeEl) {
+    currentTimeEl.textContent = formatTime(audioPlayer.currentTime);
   }
 }
 
 function updateDuration() {
-  durationEl.textContent =
-    formatTime(audioPlayer.duration);
+  if (!audioPlayer) return;
 
-  progressInput.max = 100;
+  if (durationEl) {
+    durationEl.textContent = formatTime(audioPlayer.duration);
+  }
+
+  if (progressInput) {
+    progressInput.max = 100;
+  }
 }
 
 function formatTime(seconds) {
-  if (isNaN(seconds)) {
-    return '0:00';
-  }
+  if (!Number.isFinite(seconds)) return '0:00';
 
-  const minutes =
-    Math.floor(seconds / 60);
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
 
-  const secs =
-    Math.floor(seconds % 60);
-
-  return `${minutes}:${secs
-    .toString()
-    .padStart(2, '0')}`;
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
 function handleAudioEnd() {
+  if (!audioPlayer) return;
+
   audioPlayer.currentTime = 0;
   updatePlayButton();
 }
 
 // ==========================================
 // PURCHASE HANDLING
+// Payment logic preserved
 // ==========================================
 
 async function handleBuyBeat(beat) {
-  const email = prompt(`Enter your email to purchase "${beat.title}":`);
+  const email = prompt(
+    `Enter your email to purchase "${beat.title}":`
+  );
 
-  if (!email) {
-    return;
-  }
+  if (!email) return;
 
   if (!email.includes('@')) {
     alert('Please enter a valid email address.');
@@ -657,13 +679,16 @@ async function handleBuyBeat(beat) {
 
     const result = await response.json();
 
-    if (!response.ok || !result.status || !result.data?.authorization_url) {
+    if (
+      !response.ok ||
+      !result.status ||
+      !result.data?.authorization_url
+    ) {
       console.error('Paystack error:', result);
       alert('Unable to start payment. Please try again.');
       return;
     }
 
-    // Send customer to Paystack checkout
     window.location.href = result.data.authorization_url;
 
   } catch (error) {
@@ -677,71 +702,59 @@ async function handleBuyBeat(beat) {
 // ==========================================
 
 function setupEventListeners() {
-  beatSearchInput.addEventListener(
-    'input',
-    event => {
+  if (beatSearchInput) {
+    beatSearchInput.addEventListener('input', event => {
       handleSearch(event.target.value);
-    }
-  );
+    });
+  }
 
-  closePlayer.addEventListener(
-    'click',
-    closePlayerModal
-  );
+  if (closePlayer) {
+    closePlayer.addEventListener('click', closePlayerModal);
+  }
 
-  playBtn.addEventListener(
-    'click',
-    togglePlay
-  );
+  if (playBtn) {
+    playBtn.addEventListener('click', togglePlay);
+  }
 
-  progressInput.addEventListener(
-    'change',
-    seek
-  );
+  if (progressInput) {
+    progressInput.addEventListener('input', seek);
+    progressInput.addEventListener('change', seek);
+  }
 
-  progressInput.addEventListener(
-    'input',
-    seek
-  );
+  if (audioPlayer) {
+    audioPlayer.addEventListener('timeupdate', updateProgress);
+    audioPlayer.addEventListener('loadedmetadata', updateDuration);
+    audioPlayer.addEventListener('ended', handleAudioEnd);
+    audioPlayer.addEventListener('play', updatePlayButton);
+    audioPlayer.addEventListener('pause', updatePlayButton);
 
-  audioPlayer.addEventListener(
-    'timeupdate',
-    updateProgress
-  );
+    audioPlayer.addEventListener('error', () => {
+      console.error(
+        'Preview audio failed to load:',
+        audioPlayer.currentSrc,
+        audioPlayer.error
+      );
+    });
+  }
 
-  audioPlayer.addEventListener(
-    'loadedmetadata',
-    updateDuration
-  );
-
-  audioPlayer.addEventListener(
-    'ended',
-    handleAudioEnd
-  );
-
-  navbarToggle.addEventListener(
-    'click',
-    toggleMobileMenu
-  );
+  if (navbarToggle) {
+    navbarToggle.addEventListener('click', toggleMobileMenu);
+  }
 
   navLinks.forEach(link => {
-    link.addEventListener(
-      'click',
-      () => {
-        navMenu.classList.remove('active');
-        navbarToggle.classList.remove('active');
-      }
-    );
+    link.addEventListener('click', () => {
+      if (navMenu) navMenu.classList.remove('active');
+      if (navbarToggle) navbarToggle.classList.remove('active');
+    });
   });
 
-  playerModal.addEventListener(
-    'click',
-    event => {
+  if (playerModal) {
+    playerModal.addEventListener('click', event => {
       if (event.target === playerModal) {
         closePlayerModal();
       }
-    }
-  );
+    });
+  }
 }
 
 // ==========================================
@@ -749,8 +762,8 @@ function setupEventListeners() {
 // ==========================================
 
 function toggleMobileMenu() {
-  navMenu.classList.toggle('active');
-  navbarToggle.classList.toggle('active');
+  if (navMenu) navMenu.classList.toggle('active');
+  if (navbarToggle) navbarToggle.classList.toggle('active');
 }
 
 // ==========================================
@@ -766,7 +779,7 @@ function escapeHtml(text) {
     "'": '&#039;'
   };
 
-  return text.replace(
+  return String(text).replace(
     /[&<>"']/g,
     character => map[character]
   );
@@ -777,10 +790,7 @@ function escapeHtml(text) {
 // ==========================================
 
 if (document.readyState === 'loading') {
-  document.addEventListener(
-    'DOMContentLoaded',
-    init
-  );
+  document.addEventListener('DOMContentLoaded', init);
 } else {
   init();
 }
