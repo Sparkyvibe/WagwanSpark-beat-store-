@@ -1,5 +1,5 @@
 const BEAT_FILES = {
-  "sun fire": {
+  "sun-fire": {
     title: "SUN FIRE",
     price: 50,
     candidates: [
