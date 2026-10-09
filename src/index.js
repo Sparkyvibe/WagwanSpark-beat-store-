@@ -19,7 +19,7 @@ const BEAT_FILES = {
 
   "serenade": {
   title: "SERENADE",
-  price: 15000,
+  price: 50,
   candidates: [
     "beats/SERENADE.zip",
     "SERENADE.zip"
