@@ -126,7 +126,19 @@ payload,
 secret
 );
 
-if (signature !== expectedSignature) {
+// Compare signatures without an early character-by-character exit.
+if (
+  typeof signature !== "string" ||
+  signature.length !== expectedSignature.length
+) {
+  return null;
+}
+let difference = 0;
+for (let i = 0; i < signature.length; i++) {
+  difference |= signature.charCodeAt(i) ^
+    expectedSignature.charCodeAt(i);
+}
+if (difference !== 0) {
   return null;
 }
 const data = JSON.parse(
@@ -150,10 +162,10 @@ return null;
 }
 
 /*
-Accepts the new multi-beat format:
+Accepts:
 { email, beatIds: [“sun-fire”, “phenomenal”] }
 
-Also accepts the previous single-beat format:
+Also supports the previous single-beat format:
 { email, beatId: “sun-fire” }
 
 Prices always come from BEAT_FILES.
@@ -214,8 +226,8 @@ total
 }
 
 /*
-Paystack metadata can contain a JSON string for the
-selected IDs. Also support older single-beat payments.
+Supports Paystack metadata for multiple beats and
+legacy metadata for a single beat.
 */
 function getPurchasedBeatIds(metadata) {
 if (!metadata || typeof metadata !== “object”) {
@@ -234,7 +246,7 @@ const parsed = JSON.parse(metadata.beatIds);
     return parsed;
   }
 } catch {
-  // Try the legacy single-beat field below.
+  // Fall back to the legacy single-beat field.
 }
 
 }
@@ -329,7 +341,6 @@ if (
             beatIds: JSON.stringify(beatIds),
             beatTitles: JSON.stringify(beatTitles),
             itemCount: beatIds.length,
-            // Preserve metadata for older single-beat flows.
             ...(beats.length === 1
               ? {
                   beatId: beats[0].id,
@@ -369,10 +380,7 @@ if (
     }
     return json(result);
   } catch (error) {
-    console.error(
-      "Payment initialization error:",
-      error
-    );
+    console.error("Payment initialization error:", error);
     return json({
       status: false,
       error: "Payment initialization failed. Please try again."
@@ -393,12 +401,8 @@ if (
         error: "Payment verification is not configured."
       }, 500);
     }
-    const reference =
-      url.searchParams.get("reference");
-    if (
-      !reference ||
-      reference.length > 200
-    ) {
+    const reference = url.searchParams.get("reference");
+    if (!reference || reference.length > 200) {
       return json({
         success: false,
         error: "Payment reference missing or invalid."
@@ -439,7 +443,6 @@ if (
         error: "Payment was not successful."
       }, 400);
     }
-    // Ensure the verified transaction is in Nigerian naira.
     if (
       transaction.currency &&
       transaction.currency !== "NGN"
@@ -469,12 +472,10 @@ if (
       id,
       ...BEAT_FILES[id]
     }));
-    // Calculate the expected amount from the server catalog.
     const expectedAmountKobo = beats.reduce(
       (sum, beat) => sum + beat.price * 100,
       0
     );
-    // Require an exact match, not a partial or excess payment.
     if (
       !Number.isSafeInteger(Number(transaction.amount)) ||
       Number(transaction.amount) !== expectedAmountKobo
@@ -505,14 +506,12 @@ if (
     }
     return json({
       success: true,
-      // New multi-beat response.
       beats: purchasedBeats,
       total: beats.reduce(
         (sum, beat) => sum + beat.price,
         0
       ),
       currency: "NGN",
-      // Legacy single-beat response fields.
       ...(purchasedBeats.length === 1
         ? {
             beatTitle: purchasedBeats[0].beatTitle,
@@ -521,10 +520,7 @@ if (
         : {})
     });
   } catch (error) {
-    console.error(
-      "Payment verification error:",
-      error
-    );
+    console.error("Payment verification error:", error);
     return json({
       success: false,
       error: "Payment verification failed. Please try again."
@@ -551,8 +547,7 @@ if (
         { status: 500 }
       );
     }
-    const token =
-      url.searchParams.get("token");
+    const token = url.searchParams.get("token");
     if (!token) {
       return new Response(
         "Download token missing.",
@@ -596,31 +591,19 @@ if (
     }
     const headers = new Headers();
     object.writeHttpMetadata(headers);
-    headers.set(
-      "Content-Type",
-      "application/zip"
-    );
+    headers.set("Content-Type", "application/zip");
     headers.set(
       "Content-Disposition",
       `attachment; filename="${beat.title}.zip"`
     );
-    headers.set(
-      "Cache-Control",
-      "private, no-store"
-    );
-    headers.set(
-      "X-Content-Type-Options",
-      "nosniff"
-    );
+    headers.set("Cache-Control", "private, no-store");
+    headers.set("X-Content-Type-Options", "nosniff");
     return new Response(object.body, {
       status: 200,
       headers
     });
   } catch (error) {
-    console.error(
-      "Download error:",
-      error
-    );
+    console.error("Download error:", error);
     return new Response(
       "Download failed. Please try again.",
       { status: 500 }
