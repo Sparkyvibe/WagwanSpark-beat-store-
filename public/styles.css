@@ -322,13 +322,11 @@ button {
     object-fit: cover;
 }
 
+/* Play Overlay */
 .play-overlay {
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -350,8 +348,10 @@ button {
     justify-content: center;
     font-size: 1.5rem;
     color: white;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
 }
 
+/* Beat Information */
 .beat-info {
     padding: 1.5rem;
     flex-grow: 1;
@@ -929,9 +929,20 @@ button {
         object-fit: cover;
     }
 
-    /* Keep artwork uncluttered on touchscreens */
+    /* Always show the play symbol on mobile */
     .play-overlay {
-        display: none;
+        display: flex;
+        opacity: 1;
+        background: rgba(0, 0, 0, 0.22);
+        pointer-events: none;
+    }
+
+    .play-btn-overlay {
+        width: 46px;
+        height: 46px;
+        font-size: 1.15rem;
+        background: rgba(29, 185, 84, 0.95);
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
     }
 
     .beat-info {
@@ -1130,6 +1141,12 @@ button {
     .buy-btn {
         font-size: 0.7rem;
         padding: 0.6rem 0.15rem;
+    }
+
+    .play-btn-overlay {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
     }
 
     .player-content {
