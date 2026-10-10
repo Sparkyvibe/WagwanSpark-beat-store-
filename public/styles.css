@@ -1,6 +1,6 @@
 /* ========================================
    WAGWANSPARK — PREMIUM SOUND LAB
-   Complete responsive stylesheet
+   Complete Responsive Stylesheet
 ======================================== */
 
 :root {
@@ -17,6 +17,8 @@
     --content-width: 1200px;
 }
 
+/* RESET & GLOBAL */
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -26,6 +28,7 @@
 html {
     scroll-behavior: smooth;
     scroll-padding-top: 90px;
+    background: var(--secondary-color);
 }
 
 body {
@@ -85,7 +88,9 @@ textarea {
     padding: 0 24px;
 }
 
-/* NAVIGATION */
+/* ========================================
+   NAVIGATION
+======================================== */
 
 .navbar {
     position: sticky;
@@ -170,6 +175,18 @@ textarea {
     transition: transform .25s ease, opacity .25s ease;
 }
 
+.navbar-toggle.active span:nth-child(1) {
+    transform: rotate(45deg) translate(6px, 6px);
+}
+
+.navbar-toggle.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.navbar-toggle.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(5px, -5px);
+}
+
 .cart-toggle {
     position: relative;
     display: inline-flex;
@@ -207,7 +224,9 @@ textarea {
     line-height: 1;
 }
 
-/* HERO */
+/* ========================================
+   HERO
+======================================== */
 
 .hero {
     position: relative;
@@ -296,7 +315,9 @@ textarea {
     box-shadow: 0 12px 32px rgba(29,185,84,.28);
 }
 
-/* BEATS SECTION */
+/* ========================================
+   BEATS SECTION
+======================================== */
 
 .beats-section {
     padding: 5rem 0;
@@ -552,7 +573,9 @@ textarea {
     color: var(--text-primary);
 }
 
-/* SHOPPING CART */
+/* ========================================
+   SHOPPING CART
+======================================== */
 
 .cart-overlay {
     position: fixed;
@@ -883,19 +906,20 @@ textarea {
 
 /* ========================================
    FLOATING AUDIO PLAYER
+   One consolidated layout for desktop/mobile
 ======================================== */
 
 .player-modal {
     position: fixed;
     right: 0;
-    bottom: 0;
+    bottom: 14px;
     left: 0;
     z-index: 2500;
     display: none;
     align-items: flex-end;
     justify-content: center;
     width: 100%;
-    padding: 0 12px;
+    padding: 0 14px;
     background: transparent;
     pointer-events: none;
 }
@@ -908,61 +932,60 @@ textarea {
 .player-content {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    grid-template-columns: 60px minmax(0, 1fr) 42px;
+    grid-template-rows: auto auto;
     align-items: center;
-    gap: 16px;
+    gap: 10px 14px;
     width: 100%;
-    max-width: 850px;
+    max-width: 680px;
     min-width: 0;
     margin: 0 auto;
-    padding: 14px 46px 14px 14px;
-    border: 1px solid var(--border-color);
-    border-bottom: 0;
-    border-radius: 16px 16px 0 0;
+    padding: 14px 48px 14px 14px;
+    overflow: visible;
+    border: 1px solid #353535;
+    border-radius: 16px;
     background: rgba(25,25,25,.98);
-    box-shadow: 0 -8px 35px rgba(0,0,0,.45);
+    box-shadow: 0 10px 35px rgba(0,0,0,.45);
     pointer-events: auto;
     isolation: isolate;
 }
 
-.close-player {
+/* Player close button — matches the HTML */
+
+.player-close {
     position: absolute;
     top: 8px;
     right: 8px;
-    z-index: 10;
-    display: inline-flex;
+    z-index: 5;
+    display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 27px;
+    height: 27px;
     padding: 0;
     border: 1px solid #454545;
     border-radius: 50%;
     background: #292929;
     color: #fff;
-    font-size: 1rem;
+    font-size: 13px;
     line-height: 1;
 }
 
-.close-player:hover {
-    background: var(--primary-color);
+.player-close:hover {
     border-color: var(--primary-color);
+    background: var(--primary-color);
     color: #fff;
 }
 
-.player-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    min-width: 0;
-    margin: 0;
-}
+/* Artwork */
 
 .player-artwork {
+    grid-column: 1;
+    grid-row: 1;
     display: block;
-    flex: 0 0 60px;
     width: 60px;
     height: 60px;
+    min-width: 60px;
     overflow: hidden;
     border: 1px solid #383838;
     border-radius: 9px;
@@ -970,7 +993,6 @@ textarea {
 }
 
 .player-artwork img,
-.player-art,
 #playerImage {
     display: block;
     width: 100%;
@@ -981,20 +1003,28 @@ textarea {
     background: #242424;
 }
 
-.player-details {
+/* Track title and genre */
+
+.player-info {
+    grid-column: 2;
+    grid-row: 1;
     display: flex;
-    flex: 1;
     flex-direction: column;
+    align-items: flex-start;
     justify-content: center;
+    gap: 3px;
     min-width: 0;
+    margin: 0;
+    padding: 0;
     overflow: hidden;
+    text-align: left;
 }
 
-.player-details h3,
 #playerTitle {
     display: block;
+    width: 100%;
     max-width: 100%;
-    margin-bottom: .2rem;
+    margin: 0;
     overflow: hidden;
     color: #fff;
     font-size: .95rem;
@@ -1004,41 +1034,41 @@ textarea {
     white-space: nowrap;
 }
 
-.player-meta,
 #playerGenre {
     display: block;
+    width: 100%;
     max-width: 100%;
+    margin: 0;
     overflow: hidden;
-    color: var(--text-secondary);
+    color: #b3b3b3;
     font-size: .75rem;
     line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+/* Play/pause button */
+
 .player-controls {
-    display: grid;
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-column: 3;
+    grid-row: 1;
+    display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: center;
     min-width: 0;
     margin: 0;
 }
 
-#audioPlayer {
-    display: none !important;
-}
-
-.play-btn,
 #playPauseBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 42px;
     height: 42px;
-    flex-shrink: 0;
+    flex: 0 0 42px;
     margin: 0;
     padding: 0;
+    border: 0;
     border-radius: 50%;
     background: var(--gradient);
     color: #fff;
@@ -1046,62 +1076,42 @@ textarea {
     line-height: 1;
 }
 
-.play-btn:hover,
 #playPauseBtn:hover {
     transform: scale(1.05);
     box-shadow: 0 4px 14px rgba(29,185,84,.25);
 }
 
-.progress-container,
+/* Playback progress */
+
 .player-progress-container {
+    grid-column: 1 / -1;
+    grid-row: 2;
     display: grid;
     grid-template-columns: 32px minmax(0, 1fr) 32px;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     width: 100%;
     min-width: 0;
     margin: 0;
 }
 
-.progress-bar {
-    position: relative;
-    flex: 1;
-    min-width: 0;
-    height: 5px;
-    border-radius: 3px;
-    background: var(--lighter-bg);
-    cursor: pointer;
-}
-
-.progress {
-    width: 0%;
-    height: 100%;
-    border-radius: 3px;
-    background: var(--primary-color);
-    transition: width .1s linear;
-    pointer-events: none;
-}
-
-#progressBar,
-.progress-input {
+#progressBar {
     display: block;
-    flex: 1;
-    min-width: 0;
     width: 100%;
+    min-width: 0;
     height: 5px;
     margin: 0;
     padding: 0;
-    border: 0;
-    border-radius: 5px;
     appearance: none;
     -webkit-appearance: none;
+    border: 0;
+    border-radius: 5px;
     background: #393939;
-    cursor: pointer;
     accent-color: var(--primary-color);
+    cursor: pointer;
 }
 
-#progressBar::-webkit-slider-thumb,
-.progress-input::-webkit-slider-thumb {
+#progressBar::-webkit-slider-thumb {
     width: 13px;
     height: 13px;
     appearance: none;
@@ -1112,8 +1122,7 @@ textarea {
     box-shadow: 0 0 0 3px rgba(29,185,84,.12);
 }
 
-#progressBar::-moz-range-thumb,
-.progress-input::-moz-range-thumb {
+#progressBar::-moz-range-thumb {
     width: 13px;
     height: 13px;
     border: 0;
@@ -1121,17 +1130,21 @@ textarea {
     background: var(--primary-color);
 }
 
-.time,
 #currentTime,
 #duration {
     display: inline-block;
-    flex-shrink: 0;
     min-width: 32px;
     color: #b3b3b3;
     font-size: .68rem;
     line-height: 1;
     text-align: center;
     white-space: nowrap;
+}
+
+/* Keep the native audio element hidden */
+
+#audioPlayer {
+    display: none !important;
 }
 
 .player-volume {
@@ -1161,7 +1174,9 @@ textarea {
     background: var(--primary-color);
 }
 
-/* ABOUT */
+/* ========================================
+   ABOUT
+======================================== */
 
 .about-section {
     padding: 5rem 0;
@@ -1215,7 +1230,9 @@ textarea {
     font-size: .95rem;
 }
 
-/* CONTACT */
+/* ========================================
+   CONTACT
+======================================== */
 
 .contact-section {
     padding: 5rem 0;
@@ -1298,7 +1315,9 @@ textarea {
     color: #fff;
 }
 
-/* FOOTER */
+/* ========================================
+   FOOTER
+======================================== */
 
 .footer {
     padding: 2rem 0;
@@ -1312,7 +1331,9 @@ textarea {
     margin: .5rem 0;
 }
 
-/* TABLET */
+/* ========================================
+   TABLET
+======================================== */
 
 @media (max-width: 768px) {
     .navbar-toggle {
@@ -1367,18 +1388,6 @@ textarea {
         padding: .35rem 0;
     }
 
-    .navbar-toggle.active span:nth-child(1) {
-        transform: rotate(45deg) translate(6px, 6px);
-    }
-
-    .navbar-toggle.active span:nth-child(2) {
-        opacity: 0;
-    }
-
-    .navbar-toggle.active span:nth-child(3) {
-        transform: rotate(-45deg) translate(5px, -5px);
-    }
-
     .hero {
         min-height: 65vh;
         padding: 4rem 0;
@@ -1400,7 +1409,9 @@ textarea {
     }
 }
 
-/* MOBILE */
+/* ========================================
+   MOBILE
+======================================== */
 
 @media (max-width: 480px) {
     .container {
@@ -1546,12 +1557,6 @@ textarea {
         background: #242424;
     }
 
-    .beat-artwork img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
     .play-overlay {
         display: flex;
         background: rgba(0,0,0,.2);
@@ -1632,105 +1637,69 @@ textarea {
         box-shadow: none;
     }
 
-    /* MINIMIZED PLAYER — MOBILE */
+    /* PLAYER — MOBILE */
 
     .player-modal {
-        z-index: 2500;
+        bottom: 0;
         padding: 0;
     }
 
     .player-content {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 12px;
+        grid-template-columns: 48px minmax(0, 1fr) 36px;
+        gap: 9px 10px;
         width: 100%;
         max-width: none;
-        padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+        padding: 12px 43px 12px 12px;
         border-radius: 15px 15px 0 0;
         border-bottom: 0;
+        background: #191919;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     }
 
-    .close-player {
+    .player-close {
         top: 8px;
         right: 8px;
-        width: 28px;
-        height: 28px;
-    }
-
-    .player-info {
-        gap: 12px;
-        min-width: 0;
-        padding-right: 28px;
-        text-align: left;
+        width: 26px;
+        height: 26px;
     }
 
     .player-artwork {
-        flex: 0 0 52px;
-        width: 52px;
-        height: 52px;
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
     }
 
-    .player-artwork img,
-    .player-art,
-    #playerImage {
-        width: 100%;
-        height: 100%;
-    }
-
-    .player-details h3,
     #playerTitle {
-        margin-bottom: .12rem;
         font-size: .84rem;
     }
 
-    .player-meta,
     #playerGenre {
         font-size: .68rem;
     }
 
-    .player-controls {
-        display: grid;
-        grid-template-columns: 38px minmax(0, 1fr);
-        align-items: center;
-        gap: 10px;
-        width: 100%;
-        min-width: 0;
-    }
-
-    .play-btn,
     #playPauseBtn {
-        width: 38px;
-        height: 38px;
-        margin: 0;
-        font-size: .85rem;
+        width: 36px;
+        height: 36px;
+        flex-basis: 36px;
+        font-size: .82rem;
     }
 
-    .progress-container,
     .player-progress-container {
-        display: grid;
-        grid-template-columns: 30px minmax(0, 1fr) 30px;
+        grid-template-columns: 28px minmax(0, 1fr) 28px;
         gap: 6px;
-        width: 100%;
-        min-width: 0;
     }
 
-    #progressBar,
-    .progress-input {
-        width: 100%;
-        min-width: 0;
-    }
-
-    .time,
     #currentTime,
     #duration {
-        min-width: 27px;
-        font-size: .61rem;
+        min-width: 28px;
+        font-size: .62rem;
     }
 
     .player-volume {
         display: none;
     }
 
-    /* CART */
+    /* CART — MOBILE */
 
     .cart-drawer {
         width: 100%;
@@ -1840,7 +1809,9 @@ textarea {
     }
 }
 
-/* EXTRA-SMALL PHONES */
+/* ========================================
+   EXTRA-SMALL PHONES
+======================================== */
 
 @media (max-width: 360px) {
     .navbar-container {
@@ -1923,38 +1894,31 @@ textarea {
     }
 
     .player-content {
-        gap: 10px;
-        padding-right: 14px;
+        grid-template-columns: 44px minmax(0, 1fr) 32px;
+        gap: 8px;
+        padding-right: 40px;
     }
 
     .player-artwork {
-        flex-basis: 46px;
-        width: 46px;
-        height: 46px;
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
     }
 
-    .player-details h3,
     #playerTitle {
         font-size: .76rem;
     }
 
-    .player-meta,
     #playerGenre {
         font-size: .61rem;
     }
 
-    .player-controls {
-        grid-template-columns: 34px minmax(0, 1fr);
-        gap: .45rem;
-    }
-
-    .play-btn,
     #playPauseBtn {
-        width: 34px;
-        height: 34px;
+        width: 32px;
+        height: 32px;
+        flex-basis: 32px;
     }
 
-    .time,
     #currentTime,
     #duration {
         min-width: 24px;
@@ -1987,7 +1951,9 @@ textarea {
     }
 }
 
-/* ACCESSIBILITY */
+/* ========================================
+   ACCESSIBILITY
+======================================== */
 
 @media (prefers-reduced-motion: reduce) {
     html {
@@ -2001,420 +1967,5 @@ textarea {
         transition-duration: .01ms !important;
         animation-duration: .01ms !important;
         animation-iteration-count: 1 !important;
-    }
-}
-
-/* KEEP THE STOREFRONT DARK */
-
-html,
-body {
-    background-color: #101010;
-    color: #fff;
-}
-
-/* MOBILE BEAT GRID; RESTORE WIDER GRID ON DESKTOP */
-
-.beats-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    width: 100%;
-}
-
-.beat-card {
-    width: 100%;
-    min-width: 0;
-}
-
-.beat-artwork {
-    display: block;
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    overflow: hidden;
-}
-
-.beat-artwork img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-@media (min-width: 769px) {
-    .beats-grid {
-        grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
-        gap: 1.75rem;
-    }
-}
-
-/* DESKTOP PLAYER ALIGNMENT */
-
-@media (min-width: 601px) {
-    .player-content {
-        grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
-    }
-}
-
-/* PLAYER INTERACTION AND LAYOUT SAFEGUARDS */
-
-.player-modal.active {
-    pointer-events: none;
-}
-
-.player-content {
-    isolation: isolate;
-}
-
-.player-info,
-.player-details,
-.player-controls,
-.player-progress-container {
-    min-width: 0;
-}
-
-.player-artwork img,
-#playerImage {
-    object-fit: cover;
-}
-
-@media (max-width: 600px) {
-    .player-modal {
-        padding: 0;
-    }
-
-    .player-content {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 12px;
-        max-width: none;
-        padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
-        border-radius: 15px 15px 0 0;
-    }
-
-    .player-info {
-        padding-right: 28px;
-    }
-
-    .player-artwork {
-        flex-basis: 52px;
-        width: 52px;
-        height: 52px;
-    }
-
-    .player-controls {
-        grid-template-columns: 38px minmax(0, 1fr);
-        gap: 10px;
-    }
-
-    .play-btn,
-    #playPauseBtn {
-        width: 38px;
-        height: 38px;
-    }
-
-    .progress-container,
-    .player-progress-container {
-        grid-template-columns: 30px minmax(0, 1fr) 30px;
-        gap: 6px;
-    }
-}
-
-
-/* ========================================
-   WAGWANSPARK — PLAYER LAYOUT FIX
-   Overrides only the floating audio player
-======================================== */
-
-.player-modal,
-.player-modal.active {
-    position: fixed;
-    right: 0;
-    bottom: 14px;
-    left: 0;
-    z-index: 2500;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    width: 100%;
-    padding: 0 14px;
-    background: transparent;
-    pointer-events: none;
-}
-
-.player-modal:not(.active) {
-    display: none;
-}
-
-.player-content {
-    position: relative;
-    display: grid;
-    grid-template-columns: 60px minmax(0, 1fr) 42px;
-    grid-template-rows: auto auto;
-    align-items: center;
-    gap: 10px 14px;
-    width: 100%;
-    max-width: 680px;
-    min-width: 0;
-    margin: 0 auto;
-    padding: 14px 48px 14px 14px;
-    overflow: visible;
-    border: 1px solid #353535;
-    border-radius: 16px;
-    background: #191919;
-    box-shadow: 0 10px 35px rgba(0, 0, 0, .45);
-    pointer-events: auto;
-    isolation: isolate;
-}
-
-/* Correct selectors for the actual HTML */
-
-.player-close {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 5;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 27px;
-    height: 27px;
-    padding: 0;
-    border: 1px solid #454545;
-    border-radius: 50%;
-    background: #292929;
-    color: #fff;
-    font-size: 13px;
-}
-
-.player-close:hover {
-    border-color: var(--primary-color);
-    background: var(--primary-color);
-}
-
-.player-artwork {
-    grid-column: 1;
-    grid-row: 1;
-    display: block;
-    width: 60px;
-    height: 60px;
-    min-width: 60px;
-    overflow: hidden;
-    border: 1px solid #383838;
-    border-radius: 9px;
-    background: #242424;
-}
-
-.player-artwork img,
-#playerImage {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 8px;
-}
-
-.player-info {
-    grid-column: 2;
-    grid-row: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 3px;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    text-align: left;
-}
-
-#playerTitle {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
-    overflow: hidden;
-    color: #fff;
-    font-size: .95rem;
-    font-weight: 750;
-    line-height: 1.35;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-#playerGenre {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
-    overflow: hidden;
-    color: #b3b3b3;
-    font-size: .75rem;
-    line-height: 1.4;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.player-controls {
-    grid-column: 3;
-    grid-row: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 0;
-    margin: 0;
-}
-
-#playPauseBtn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 42px;
-    height: 42px;
-    flex: 0 0 42px;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    background: var(--gradient);
-    color: #fff;
-    font-size: .95rem;
-}
-
-#playPauseBtn:hover {
-    transform: scale(1.05);
-    box-shadow: 0 4px 14px rgba(29, 185, 84, .25);
-}
-
-.player-progress-container {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) 32px;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    min-width: 0;
-    margin: 0;
-}
-
-#progressBar {
-    display: block;
-    width: 100%;
-    min-width: 0;
-    height: 5px;
-    margin: 0;
-    padding: 0;
-    appearance: none;
-    -webkit-appearance: none;
-    border: 0;
-    border-radius: 5px;
-    background: #393939;
-    accent-color: var(--primary-color);
-    cursor: pointer;
-}
-
-#progressBar::-webkit-slider-thumb {
-    width: 13px;
-    height: 13px;
-    appearance: none;
-    -webkit-appearance: none;
-    border: 0;
-    border-radius: 50%;
-    background: var(--primary-color);
-}
-
-#progressBar::-moz-range-thumb {
-    width: 13px;
-    height: 13px;
-    border: 0;
-    border-radius: 50%;
-    background: var(--primary-color);
-}
-
-#currentTime,
-#duration {
-    min-width: 32px;
-    color: #b3b3b3;
-    font-size: .68rem;
-    line-height: 1;
-    text-align: center;
-    white-space: nowrap;
-}
-
-#audioPlayer {
-    display: none !important;
-}
-
-@media (max-width: 600px) {
-    .player-modal,
-    .player-modal.active {
-        right: 0;
-        bottom: 0;
-        left: 0;
-        padding: 0;
-    }
-
-    .player-content {
-        grid-template-columns: 48px minmax(0, 1fr) 36px;
-        gap: 9px 10px;
-        width: 100%;
-        max-width: none;
-        padding: 12px 43px 12px 12px;
-        border-radius: 15px 15px 0 0;
-        border-bottom: 0;
-        background: #191919;
-        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-    }
-
-    .player-artwork {
-        width: 48px;
-        height: 48px;
-        min-width: 48px;
-    }
-
-    #playerTitle {
-        font-size: .84rem;
-    }
-
-    #playerGenre {
-        font-size: .68rem;
-    }
-
-    #playPauseBtn {
-        width: 36px;
-        height: 36px;
-        flex-basis: 36px;
-        font-size: .82rem;
-    }
-
-    .player-progress-container {
-        grid-template-columns: 28px minmax(0, 1fr) 28px;
-        gap: 6px;
-    }
-
-    #currentTime,
-    #duration {
-        min-width: 28px;
-        font-size: .62rem;
-    }
-}
-
-@media (max-width: 360px) {
-    .player-content {
-        grid-template-columns: 44px minmax(0, 1fr) 32px;
-        gap: 8px;
-        padding-right: 40px;
-    }
-
-    .player-artwork {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
-    }
-
-    #playPauseBtn {
-        width: 32px;
-        height: 32px;
-        flex-basis: 32px;
     }
 }
