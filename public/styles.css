@@ -2117,3 +2117,304 @@ body {
         gap: 6px;
     }
 }
+
+
+/* ========================================
+   WAGWANSPARK — PLAYER LAYOUT FIX
+   Overrides only the floating audio player
+======================================== */
+
+.player-modal,
+.player-modal.active {
+    position: fixed;
+    right: 0;
+    bottom: 14px;
+    left: 0;
+    z-index: 2500;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    width: 100%;
+    padding: 0 14px;
+    background: transparent;
+    pointer-events: none;
+}
+
+.player-modal:not(.active) {
+    display: none;
+}
+
+.player-content {
+    position: relative;
+    display: grid;
+    grid-template-columns: 60px minmax(0, 1fr) 42px;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 10px 14px;
+    width: 100%;
+    max-width: 680px;
+    min-width: 0;
+    margin: 0 auto;
+    padding: 14px 48px 14px 14px;
+    overflow: visible;
+    border: 1px solid #353535;
+    border-radius: 16px;
+    background: #191919;
+    box-shadow: 0 10px 35px rgba(0, 0, 0, .45);
+    pointer-events: auto;
+    isolation: isolate;
+}
+
+/* Correct selectors for the actual HTML */
+
+.player-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 27px;
+    height: 27px;
+    padding: 0;
+    border: 1px solid #454545;
+    border-radius: 50%;
+    background: #292929;
+    color: #fff;
+    font-size: 13px;
+}
+
+.player-close:hover {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+}
+
+.player-artwork {
+    grid-column: 1;
+    grid-row: 1;
+    display: block;
+    width: 60px;
+    height: 60px;
+    min-width: 60px;
+    overflow: hidden;
+    border: 1px solid #383838;
+    border-radius: 9px;
+    background: #242424;
+}
+
+.player-artwork img,
+#playerImage {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+.player-info {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    text-align: left;
+}
+
+#playerTitle {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #fff;
+    font-size: .95rem;
+    font-weight: 750;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#playerGenre {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #b3b3b3;
+    font-size: .75rem;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.player-controls {
+    grid-column: 3;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    margin: 0;
+}
+
+#playPauseBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--gradient);
+    color: #fff;
+    font-size: .95rem;
+}
+
+#playPauseBtn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 14px rgba(29, 185, 84, .25);
+}
+
+.player-progress-container {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+
+#progressBar {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    height: 5px;
+    margin: 0;
+    padding: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 0;
+    border-radius: 5px;
+    background: #393939;
+    accent-color: var(--primary-color);
+    cursor: pointer;
+}
+
+#progressBar::-webkit-slider-thumb {
+    width: 13px;
+    height: 13px;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 0;
+    border-radius: 50%;
+    background: var(--primary-color);
+}
+
+#progressBar::-moz-range-thumb {
+    width: 13px;
+    height: 13px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--primary-color);
+}
+
+#currentTime,
+#duration {
+    min-width: 32px;
+    color: #b3b3b3;
+    font-size: .68rem;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+}
+
+#audioPlayer {
+    display: none !important;
+}
+
+@media (max-width: 600px) {
+    .player-modal,
+    .player-modal.active {
+        right: 0;
+        bottom: 0;
+        left: 0;
+        padding: 0;
+    }
+
+    .player-content {
+        grid-template-columns: 48px minmax(0, 1fr) 36px;
+        gap: 9px 10px;
+        width: 100%;
+        max-width: none;
+        padding: 12px 43px 12px 12px;
+        border-radius: 15px 15px 0 0;
+        border-bottom: 0;
+        background: #191919;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .player-artwork {
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
+    }
+
+    #playerTitle {
+        font-size: .84rem;
+    }
+
+    #playerGenre {
+        font-size: .68rem;
+    }
+
+    #playPauseBtn {
+        width: 36px;
+        height: 36px;
+        flex-basis: 36px;
+        font-size: .82rem;
+    }
+
+    .player-progress-container {
+        grid-template-columns: 28px minmax(0, 1fr) 28px;
+        gap: 6px;
+    }
+
+    #currentTime,
+    #duration {
+        min-width: 28px;
+        font-size: .62rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .player-content {
+        grid-template-columns: 44px minmax(0, 1fr) 32px;
+        gap: 8px;
+        padding-right: 40px;
+    }
+
+    .player-artwork {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+    }
+
+    #playPauseBtn {
+        width: 32px;
+        height: 32px;
+        flex-basis: 32px;
+    }
+}
