@@ -1889,3 +1889,36 @@ scroll-behavior: auto;
 }
 
 }
+
+/* TEMPORARY BACKGROUND AND CARD LAYOUT TEST */
+html,
+body {
+    background-color: #101010 !important;
+    color: #ffffff;
+}
+
+.beats-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    width: 100%;
+}
+
+.beat-card {
+    width: 100%;
+    min-width: 0;
+}
+
+.beat-artwork {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+}
+
+.beat-artwork img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
