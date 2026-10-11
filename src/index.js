@@ -1,268 +1,764 @@
-const BEAT_FILES = {
+
+const LEGACY_BEATS = {
   "sun-fire": {
     title: "SUN FIRE",
     price: 7000,
-    candidates: [
-      "beats/SUN FIRE.zip",
-      "SUN FIRE.zip"
-    ]
+    candidates: ["beats/SUN FIRE.zip", "SUN FIRE.zip"]
   },
-  "phenomenal": {
+  phenomenal: {
     title: "PHENOMENAL",
     price: 7000,
-    candidates: [
-      "beats/PHENOMENAL.zip",
-      "PHENOMENAL.zip"
-    ]
+    candidates: ["beats/PHENOMENAL.zip", "PHENOMENAL.zip"]
   },
-  "serenade": {
+  serenade: {
     title: "SERENADE",
     price: 7000,
-    candidates: [
-      "beats/SERENADE.zip",
-      "SERENADE.zip"
-    ]
+    candidates: ["beats/SERENADE.zip", "SERENADE.zip"]
   }
 };
+
 const CALLBACK_URL =
   "https://wagwanspark-beat-store.taiyeowoyemi.workers.dev/success.html";
+
 const DOWNLOAD_TOKEN_LIFETIME = 30 * 60 * 1000;
-function json(data, status = 200) {
+const ADMIN_SESSION_LIFETIME = 8 * 60 * 60 * 1000;
+const SESSION_COOKIE = "ws_admin_session";
+
+function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Cache-Control": "no-store"
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      ...extraHeaders
     }
   });
 }
+
 function base64url(bytes) {
   let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+
   return btoa(binary)
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 }
+
 function base64urlDecode(value) {
-  value = value
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-  while (value.length % 4) {
-    value += "=";
-  }
+  value = value.replace(/-/g, "+").replace(/_/g, "/");
+  while (value.length % 4) value += "=";
+
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);
+
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
+
   return bytes;
 }
+
 async function createSignature(payload, secret) {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
-    {
-      name: "HMAC",
-      hash: "SHA-256"
-    },
+    { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
+
   const signature = await crypto.subtle.sign(
     "HMAC",
     key,
     new TextEncoder().encode(payload)
   );
+
   return base64url(new Uint8Array(signature));
 }
-async function createDownloadToken(data, secret) {
+
+async function verifySignature(payload, signature, secret) {
+  const expected = await createSignature(payload, secret);
+
+  if (
+    typeof signature !== "string" ||
+    signature.length !== expected.length
+  ) return false;
+
+  let difference = 0;
+
+  for (let i = 0; i < signature.length; i++) {
+    difference |= signature.charCodeAt(i) ^ expected.charCodeAt(i);
+  }
+
+  return difference === 0;
+}
+
+async function createSignedToken(data, secret) {
   const payload = base64url(
     new TextEncoder().encode(JSON.stringify(data))
   );
-  const signature = await createSignature(
-    payload,
-    secret
-  );
-  return `${payload}.${signature}`;
+
+  return `${payload}.${await createSignature(payload, secret)}`;
 }
-async function verifyDownloadToken(token, secret) {
-  const parts = token.split(".");
-  if (parts.length !== 2) {
-    return null;
-  }
-  const [payload, signature] = parts;
+
+async function verifySignedToken(token, secret) {
   try {
-    const expectedSignature = await createSignature(
-      payload,
-      secret
-    );
-    if (
-      typeof signature !== "string" ||
-      signature.length !== expectedSignature.length
-    ) {
+    if (!token || token.length > 4096) return null;
+
+    const parts = token.split(".");
+    if (parts.length !== 2) return null;
+
+    const [payload, signature] = parts;
+
+    if (!(await verifySignature(payload, signature, secret))) {
       return null;
     }
-    let difference = 0;
-    for (let i = 0; i < signature.length; i++) {
-      difference |=
-        signature.charCodeAt(i) ^
-        expectedSignature.charCodeAt(i);
-    }
-    if (difference !== 0) {
-      return null;
-    }
+
     const data = JSON.parse(
-      new TextDecoder().decode(
-        base64urlDecode(payload)
-      )
+      new TextDecoder().decode(base64urlDecode(payload))
     );
-    if (
-      !data.exp ||
-      Date.now() > data.exp ||
-      typeof data.beatId !== "string" ||
-      typeof data.reference !== "string"
-    ) {
-      return null;
-    }
+
+    if (!data.exp || Date.now() > data.exp) return null;
+
     return data;
   } catch {
     return null;
   }
 }
-/*
-Accepts:
-{ email, beatIds: ["sun-fire", "phenomenal"] }
-Also supports the previous single-beat format:
-{ email, beatId: "sun-fire" }
-Prices always come from BEAT_FILES.
-Client-supplied totals are never trusted.
-*/
-function getRequestedBeats(data) {
+
+async function createDownloadToken(data, secret) {
+  return createSignedToken(data, secret);
+}
+
+async function verifyDownloadToken(token, secret) {
+  const data = await verifySignedToken(token, secret);
+
+  if (
+    !data ||
+    typeof data.beatId !== "string" ||
+    typeof data.reference !== "string"
+  ) return null;
+
+  return data;
+}
+
+function cookieValue(request, name) {
+  const header = request.headers.get("Cookie") || "";
+
+  for (const part of header.split(";")) {
+    const index = part.indexOf("=");
+    if (index < 0) continue;
+
+    if (part.slice(0, index).trim() === name) {
+      return part.slice(index + 1).trim();
+    }
+  }
+
+  return "";
+}
+
+function sessionCookie(token, maxAge = 28800) {
+  return `${SESSION_COOKIE}=${token}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
+}
+
+async function getAdminSession(request, env) {
+  if (!env.ADMIN_PASSWORD) return null;
+
+  const token = cookieValue(request, SESSION_COOKIE);
+
+  if (!token) return null;
+
+  const session = await verifySignedToken(token, env.ADMIN_PASSWORD);
+
+  if (
+    !session ||
+    session.role !== "admin" ||
+    typeof session.csrf !== "string"
+  ) return null;
+
+  return session;
+}
+
+async function requireAdmin(request, env, requireCsrf = false) {
+  const session = await getAdminSession(request, env);
+
+  if (!session) {
+    return {
+      response: json({ error: "Authentication required." }, 401)
+    };
+  }
+
+  if (requireCsrf) {
+    const supplied = request.headers.get("X-CSRF-Token") || "";
+
+    if (!supplied || supplied !== session.csrf) {
+      return {
+        response: json({ error: "Invalid security token." }, 403)
+      };
+    }
+  }
+
+  return { session };
+}
+
+function validId(id) {
+  return typeof id === "string" &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) &&
+    id.length <= 80;
+}
+
+function cleanText(value, maxLength = 200) {
+  return typeof value === "string"
+    ? value.trim().slice(0, maxLength)
+    : "";
+}
+
+async function getBeat(env, id) {
+  return env.DB.prepare(
+    `SELECT id, title, genre, bpm, musical_key, price, description,
+            artwork_key, preview_key, zip_key, status, featured,
+            created_at, updated_at
+     FROM beats WHERE id = ?`
+  ).bind(id).first();
+}
+
+async function getPublishedBeats(env) {
+  const result = await env.DB.prepare(
+    `SELECT id, title, genre, bpm, musical_key, price, description,
+            artwork_key, preview_key, status, featured
+     FROM beats
+     WHERE status = 'published'
+     ORDER BY featured DESC, created_at DESC`
+  ).all();
+
+  return result.results || [];
+}
+
+async function getRequestedBeats(data, env) {
   let beatIds;
+
   if (Array.isArray(data.beatIds)) {
     beatIds = data.beatIds;
   } else if (typeof data.beatId === "string") {
     beatIds = [data.beatId];
   } else {
-    return {
-      error: "Please select at least one beat."
-    };
+    return { error: "Please select at least one beat." };
   }
+
   if (
     beatIds.length === 0 ||
-    beatIds.length > Object.keys(BEAT_FILES).length
+    beatIds.length > 50 ||
+    beatIds.some(id => typeof id !== "string")
   ) {
-    return {
-      error: "Invalid number of selected beats."
-    };
+    return { error: "Invalid number of selected beats." };
   }
-  if (
-    beatIds.some(
-      id => typeof id !== "string" || !BEAT_FILES[id]
-    )
-  ) {
-    return {
-      error: "One or more selected beats could not be found."
-    };
-  }
+
   if (new Set(beatIds).size !== beatIds.length) {
-    return {
-      error: "Duplicate beats are not allowed."
-    };
+    return { error: "Duplicate beats are not allowed." };
   }
-  const beats = beatIds.map(id => ({
-    id,
-    ...BEAT_FILES[id]
-  }));
-  const total = beats.reduce(
-    (sum, beat) => sum + beat.price,
-    0
-  );
+
+  const beats = [];
+
+  for (const id of beatIds) {
+    const beat = await getBeat(env, id);
+
+    if (!beat || beat.status !== "published") {
+      return {
+        error: "One or more selected beats are unavailable."
+      };
+    }
+
+    if (!Number.isSafeInteger(beat.price) || beat.price < 1) {
+      return { error: "Invalid beat price." };
+    }
+
+    beats.push({
+      id: beat.id,
+      title: beat.title,
+      price: beat.price
+    });
+  }
+
   return {
     beats,
-    total
+    total: beats.reduce((sum, beat) => sum + beat.price, 0)
   };
 }
-/*
-Supports Paystack metadata for multiple beats and
-legacy metadata for a single beat.
-*/
+
 function getPurchasedBeatIds(metadata) {
-  if (!metadata || typeof metadata !== "object") {
-    return null;
-  }
-  if (Array.isArray(metadata.beatIds)) {
-    return metadata.beatIds;
-  }
+  if (!metadata || typeof metadata !== "object") return null;
+
+  if (Array.isArray(metadata.beatIds)) return metadata.beatIds;
+
   if (typeof metadata.beatIds === "string") {
     try {
       const parsed = JSON.parse(metadata.beatIds);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    } catch {
-      // Fall back to the legacy single-beat field.
-    }
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
   }
+
   if (typeof metadata.beatId === "string") {
     return [metadata.beatId];
   }
+
   return null;
 }
+
+async function getZipObject(env, beat) {
+  if (!env.BEATS_BUCKET) return null;
+
+  const keys = [];
+
+  if (beat.zip_key) keys.push(beat.zip_key);
+
+  const legacy = LEGACY_BEATS[beat.id];
+
+  if (legacy) keys.push(...legacy.candidates);
+
+  for (const key of [...new Set(keys)]) {
+    const object = await env.BEATS_BUCKET.get(key);
+    if (object) return object;
+  }
+
+  return null;
+}
+
+function safeFilename(value) {
+  return String(value || "download")
+    .replace(/[^a-zA-Z0-9 _-]/g, "")
+    .trim()
+    .slice(0, 100) || "download";
+}
+
+async function handleAdmin(request, env, url) {
+  if (!env.ADMIN_PASSWORD) {
+    return json({ error: "Admin password is not configured." }, 503);
+  }
+
+  if (!env.DB || !env.BEATS_BUCKET) {
+    return json({ error: "Database or storage binding is missing." }, 500);
+  }
+
+  const path = url.pathname;
+
+  // Login
+  if (path === "/api/admin/login" && request.method === "POST") {
+    let data;
+
+    try {
+      data = await request.json();
+    } catch {
+      return json({ error: "Invalid request." }, 400);
+    }
+
+    if (
+      typeof data.password !== "string" ||
+      data.password.length > 1024 ||
+      data.password !== env.ADMIN_PASSWORD
+    ) {
+      return json({ error: "Incorrect password." }, 401);
+    }
+
+    const csrf = base64url(crypto.getRandomValues(new Uint8Array(32)));
+
+    const token = await createSignedToken({
+      role: "admin",
+      csrf,
+      exp: Date.now() + ADMIN_SESSION_LIFETIME
+    }, env.ADMIN_PASSWORD);
+
+    return json(
+      { success: true },
+      200,
+      { "Set-Cookie": sessionCookie(token) }
+    );
+  }
+
+  // Logout
+  if (path === "/api/admin/logout" && request.method === "POST") {
+    const auth = await requireAdmin(request, env, true);
+    if (auth.response) return auth.response;
+
+    return json(
+      { success: true },
+      200,
+      { "Set-Cookie": sessionCookie("", 0) }
+    );
+  }
+
+  // Check session and return CSRF token
+  if (path === "/api/admin/session" && request.method === "GET") {
+    const session = await getAdminSession(request, env);
+
+    if (!session) return json({ authenticated: false }, 401);
+
+    return json({
+      authenticated: true,
+      csrfToken: session.csrf
+    });
+  }
+
+  // All remaining admin routes require a valid session.
+  const isReadOnly =
+    request.method === "GET" && path === "/api/admin/beats";
+
+  const auth = await requireAdmin(request, env, !isReadOnly);
+  if (auth.response) return auth.response;
+
+  // List all beats
+  if (path === "/api/admin/beats" && request.method === "GET") {
+    const result = await env.DB.prepare(
+      `SELECT * FROM beats ORDER BY created_at DESC`
+    ).all();
+
+    return json({ beats: result.results || [] });
+  }
+
+  // Create a beat draft
+  if (path === "/api/admin/beats" && request.method === "POST") {
+    let data;
+
+    try {
+      data = await request.json();
+    } catch {
+      return json({ error: "Invalid request." }, 400);
+    }
+
+    const id = cleanText(data.id, 80).toLowerCase();
+    const title = cleanText(data.title, 120);
+    const genre = cleanText(data.genre, 80);
+    const musicalKey = cleanText(data.musical_key, 40);
+    const bpm = data.bpm === "" || data.bpm == null
+      ? null : Number(data.bpm);
+    const price = Number(data.price);
+
+    if (!validId(id) || !title || !genre) {
+      return json({ error: "Provide a valid ID, title, and genre." }, 400);
+    }
+
+    if (
+      !Number.isSafeInteger(price) || price < 1 ||
+      (bpm !== null && (!Number.isInteger(bpm) || bpm < 1 || bpm > 400))
+    ) {
+      return json({ error: "Check the price and BPM values." }, 400);
+    }
+
+    try {
+      await env.DB.prepare(
+        `INSERT INTO beats
+         (id, title, genre, bpm, musical_key, price, description,
+          status, featured, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 0,
+                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      ).bind(
+        id, title, genre, bpm, musicalKey, price,
+        cleanText(data.description, 2000)
+      ).run();
+    } catch (error) {
+      if (String(error).includes("UNIQUE")) {
+        return json({ error: "That beat ID already exists." }, 409);
+      }
+      throw error;
+    }
+
+    return json({ success: true, beat: await getBeat(env, id) }, 201);
+  }
+
+  // Upload artwork, preview audio, or private ZIP
+  if (path === "/api/admin/upload" && request.method === "POST") {
+    const form = await request.formData();
+    const id = cleanText(form.get("beatId"), 80);
+    const kind = cleanText(form.get("kind"), 20);
+    const file = form.get("file");
+
+    if (!validId(id) || !file || typeof file.arrayBuffer !== "function") {
+      return json({ error: "Select a beat and a file." }, 400);
+    }
+
+    const beat = await getBeat(env, id);
+
+    if (!beat) return json({ error: "Beat not found." }, 404);
+
+    const mime = (file.type || "").toLowerCase();
+    let key;
+    let column;
+    let maxBytes;
+
+    if (kind === "artwork") {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(mime)) {
+        return json({ error: "Artwork must be JPG, PNG, or WebP." }, 400);
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        return json({ error: "Artwork must be 10 MB or smaller." }, 413);
+      }
+
+      const ext = mime === "image/jpeg" ? "jpg"
+        : mime === "image/png" ? "png" : "webp";
+
+      key = `artwork/${id}.${ext}`;
+      column = "artwork_key";
+      maxBytes = 10 * 1024 * 1024;
+    } else if (kind === "preview") {
+      if (!["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav"].includes(mime)) {
+        return json({ error: "Preview must be an MP3 or WAV audio file." }, 400);
+      }
+
+      if (file.size > 25 * 1024 * 1024) {
+        return json({ error: "Preview must be 25 MB or smaller." }, 413);
+      }
+
+      const ext = mime.includes("wav") ? "wav" : "mp3";
+      key = `previews/${id}.${ext}`;
+      column = "preview_key";
+      maxBytes = 25 * 1024 * 1024;
+    } else if (kind === "zip") {
+      if (mime !== "application/zip" && !file.name.toLowerCase().endsWith(".zip")) {
+        return json({ error: "Upload a ZIP file." }, 400);
+      }
+
+      if (file.size > 100 * 1024 * 1024) {
+        return json({ error: "ZIP must be 100 MB or smaller." }, 413);
+      }
+
+      key = `beats/${id}.zip`;
+      column = "zip_key";
+      maxBytes = 100 * 1024 * 1024;
+    } else {
+      return json({ error: "Unknown upload type." }, 400);
+    }
+
+    if (!file.size || file.size > maxBytes) {
+      return json({ error: "File is empty or exceeds the size limit." }, 413);
+    }
+
+    await env.BEATS_BUCKET.put(key, await file.arrayBuffer(), {
+      httpMetadata: {
+        contentType: kind === "zip" ? "application/zip" : mime
+      },
+      customMetadata: {
+        beatId: id,
+        kind
+      }
+    });
+
+    await env.DB.prepare(
+      `UPDATE beats SET ${column} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).bind(key, id).run();
+
+    return json({
+      success: true,
+      kind,
+      key,
+      beat: await getBeat(env, id)
+    });
+  }
+
+  // Update a beat
+  const beatMatch = path.match(/^\/api\/admin\/beats\/([a-z0-9-]+)$/);
+
+  if (beatMatch && request.method === "PATCH") {
+    const id = beatMatch[1];
+    const existing = await getBeat(env, id);
+
+    if (!existing) return json({ error: "Beat not found." }, 404);
+
+    let data;
+
+    try {
+      data = await request.json();
+    } catch {
+      return json({ error: "Invalid request." }, 400);
+    }
+
+    const title = cleanText(data.title, 120);
+    const genre = cleanText(data.genre, 80);
+    const description = cleanText(data.description, 2000);
+    const musicalKey = cleanText(data.musical_key, 40);
+    const bpm = data.bpm === "" || data.bpm == null
+      ? null : Number(data.bpm);
+    const price = Number(data.price);
+    const featured = Number(data.featured) === 1 ? 1 : 0;
+    const status = data.status === "published" ? "published" : "draft";
+
+    if (!title || !genre) {
+      return json({ error: "Title and genre are required." }, 400);
+    }
+
+    if (
+      !Number.isSafeInteger(price) || price < 1 ||
+      (bpm !== null && (!Number.isInteger(bpm) || bpm < 1 || bpm > 400))
+    ) {
+      return json({ error: "Check the price and BPM values." }, 400);
+    }
+
+    if (status === "published") {
+      for (const column of ["artwork_key", "preview_key", "zip_key"]) {
+        if (!existing[column]) {
+          return json({
+            error: `Upload the artwork, preview, and ZIP before publishing. Missing: ${column}.`
+          }, 400);
+        }
+
+        const object = await env.BEATS_BUCKET.head(existing[column]);
+
+        if (!object) {
+          return json({
+            error: `The file for ${column} is missing from R2. Upload it again before publishing.`
+          }, 400);
+        }
+      }
+    }
+
+    await env.DB.prepare(
+      `UPDATE beats
+       SET title = ?, genre = ?, bpm = ?, musical_key = ?, price = ?,
+           description = ?, status = ?, featured = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).bind(
+      title, genre, bpm, musicalKey, price,
+      description, status, featured, id
+    ).run();
+
+    return json({ success: true, beat: await getBeat(env, id) });
+  }
+
+  // Delete a beat and its R2 files
+  if (beatMatch && request.method === "DELETE") {
+    const id = beatMatch[1];
+    const beat = await getBeat(env, id);
+
+    if (!beat) return json({ error: "Beat not found." }, 404);
+
+    for (const key of [
+      beat.artwork_key,
+      beat.preview_key,
+      beat.zip_key
+    ]) {
+      if (key) await env.BEATS_BUCKET.delete(key);
+    }
+
+    await env.DB.prepare("DELETE FROM beats WHERE id = ?")
+      .bind(id).run();
+
+    return json({ success: true });
+  }
+
+  return json({ error: "Admin endpoint not found." }, 404);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    // ==============================
-    // CORS PREFLIGHT
-    // ==============================
+    const path = url.pathname;
+
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
         headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-          "Access-Control-Max-Age": "86400"
+          "Access-Control-Allow-Origin": url.origin,
+          "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, X-CSRF-Token",
+          "Access-Control-Max-Age": "86400",
+          "Vary": "Origin"
         }
       });
     }
-    // ==============================
-    // CREATE PAYMENT
-    // ==============================
-    if (
-      url.pathname === "/api/create-payment" &&
-      request.method === "POST"
-    ) {
+
+    // Admin API
+    if (path.startsWith("/api/admin/")) {
       try {
-        if (!env.PAYSTACK_SECRET_KEY) {
-          console.error("PAYSTACK_SECRET_KEY is not configured.");
+        return await handleAdmin(request, env, url);
+      } catch (error) {
+        console.error("Admin API error:", error);
+        return json({ error: "Admin request failed." }, 500);
+      }
+    }
+
+    // Public catalogue for the future dynamic storefront.
+    if (path === "/api/beats" && request.method === "GET") {
+      try {
+        const beats = await getPublishedBeats(env);
+
+        return json({
+          beats: beats.map(beat => ({
+            ...beat,
+            artwork: beat.artwork_key
+              ? `/api/media/${encodeURIComponent(beat.id)}/artwork`
+              : "",
+            previewAudio: beat.preview_key
+              ? `/api/media/${encodeURIComponent(beat.id)}/preview`
+              : "",
+            formats: ["MP3", "WAV"],
+            available: true
+          }))
+        });
+      } catch (error) {
+        console.error("Public catalogue error:", error);
+        return json({ error: "Catalogue unavailable." }, 500);
+      }
+    }
+
+    // Public artwork and preview only; ZIPs are never served here.
+    const mediaMatch = path.match(/^\/api\/media\/([a-z0-9-]+)\/(artwork|preview)$/);
+
+    if (mediaMatch && request.method === "GET") {
+      try {
+        const beat = await getBeat(env, mediaMatch[1]);
+
+        if (!beat || beat.status !== "published") {
+          return new Response("Not found.", { status: 404 });
+        }
+
+        const key = mediaMatch[2] === "artwork"
+          ? beat.artwork_key
+          : beat.preview_key;
+
+        if (!key || !env.BEATS_BUCKET) {
+          return new Response("Not found.", { status: 404 });
+        }
+
+        const object = await env.BEATS_BUCKET.get(key);
+
+        if (!object) return new Response("Not found.", { status: 404 });
+
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        headers.set("Cache-Control", "public, max-age=300");
+        headers.set("X-Content-Type-Options", "nosniff");
+
+        return new Response(object.body, { headers });
+      } catch (error) {
+        console.error("Media error:", error);
+        return new Response("Media unavailable.", { status: 500 });
+      }
+    }
+
+    // CREATE PAYMENT
+    if (path === "/api/create-payment" && request.method === "POST") {
+      try {
+        if (!env.PAYSTACK_SECRET_KEY || !env.DB) {
           return json({
             status: false,
             error: "Payment service is not configured."
           }, 500);
         }
+
         let data;
+
         try {
           data = await request.json();
         } catch {
-          return json({
-            status: false,
-            error: "Invalid request data."
-          }, 400);
+          return json({ status: false, error: "Invalid request data." }, 400);
         }
-        const email =
-          typeof data.email === "string"
-            ? data.email.trim()
-            : "";
+
+        const email = typeof data.email === "string" ? data.email.trim() : "";
+
         if (
-          !email ||
-          email.length > 254 ||
+          !email || email.length > 254 ||
           !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
         ) {
           return json({
@@ -270,17 +766,18 @@ export default {
             error: "Please enter a valid email address."
           }, 400);
         }
-        const selection = getRequestedBeats(data);
+
+        const selection = await getRequestedBeats(data, env);
+
         if (selection.error) {
-          return json({
-            status: false,
-            error: selection.error
-          }, 400);
+          return json({ status: false, error: selection.error }, 400);
         }
+
         const { beats, total } = selection;
         const beatIds = beats.map(beat => beat.id);
         const beatTitles = beats.map(beat => beat.title);
-        const paystackResponse = await fetch(
+
+        const response = await fetch(
           "https://api.paystack.co/transaction/initialize",
           {
             method: "POST",
@@ -297,43 +794,28 @@ export default {
                 beatIds: JSON.stringify(beatIds),
                 beatTitles: JSON.stringify(beatTitles),
                 itemCount: beatIds.length,
-                ...(beats.length === 1
-                  ? {
-                      beatId: beats[0].id,
-                      beatTitle: beats[0].title
-                    }
-                  : {})
+                ...(beats.length === 1 ? {
+                  beatId: beats[0].id,
+                  beatTitle: beats[0].title
+                } : {})
               }
             })
           }
         );
-        let result;
-        try {
-          result = await paystackResponse.json();
-        } catch {
-          console.error("Paystack returned an unreadable response.");
-          return json({
-            status: false,
-            error: "Unable to initialize payment. Please try again."
-          }, 502);
-        }
+
+        const result = await response.json();
+
         if (
-          !paystackResponse.ok ||
-          !result.status ||
-          !result.data ||
-          !result.data.authorization_url ||
-          !result.data.reference
+          !response.ok || !result.status || !result.data ||
+          !result.data.authorization_url || !result.data.reference
         ) {
-          console.error(
-            "Paystack initialization failed:",
-            result.message || result
-          );
+          console.error("Paystack initialization failed:", result.message);
           return json({
             status: false,
-            error: result.message ||
-              "Unable to initialize payment. Please try again."
+            error: result.message || "Unable to initialize payment."
           }, 502);
         }
+
         return json(result);
       } catch (error) {
         console.error("Payment initialization error:", error);
@@ -343,80 +825,67 @@ export default {
         }, 500);
       }
     }
-    // ==============================
+
     // VERIFY PAYMENT
-    // ==============================
-    if (
-      url.pathname === "/api/verify-payment" &&
-      request.method === "GET"
-    ) {
+    if (path === "/api/verify-payment" && request.method === "GET") {
       try {
-        if (!env.PAYSTACK_SECRET_KEY) {
+        if (!env.PAYSTACK_SECRET_KEY || !env.DB) {
           return json({
             success: false,
             error: "Payment verification is not configured."
           }, 500);
         }
+
         const reference = url.searchParams.get("reference");
+
         if (!reference || reference.length > 200) {
           return json({
             success: false,
             error: "Payment reference missing or invalid."
           }, 400);
         }
-        const paystackResponse = await fetch(
+
+        const response = await fetch(
           `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
           {
-            method: "GET",
             headers: {
               Authorization: `Bearer ${env.PAYSTACK_SECRET_KEY}`
             }
           }
         );
-        let result;
-        try {
-          result = await paystackResponse.json();
-        } catch {
-          return json({
-            success: false,
-            error: "Unable to read payment verification response."
-          }, 502);
-        }
-        if (
-          !paystackResponse.ok ||
-          !result.status ||
-          !result.data
-        ) {
+
+        const result = await response.json();
+
+        if (!response.ok || !result.status || !result.data) {
           return json({
             success: false,
             error: "Unable to verify payment."
           }, 400);
         }
+
         const transaction = result.data;
+
         if (transaction.status !== "success") {
           return json({
             success: false,
             error: "Payment was not successful."
           }, 400);
         }
-        if (
-          transaction.currency &&
-          transaction.currency !== "NGN"
-        ) {
+
+        if (transaction.currency && transaction.currency !== "NGN") {
           return json({
             success: false,
             error: "Payment currency is incorrect."
           }, 400);
         }
-        const metadata = transaction.metadata || {};
-        const beatIds = getPurchasedBeatIds(metadata);
+
+        const beatIds = getPurchasedBeatIds(transaction.metadata || {});
+
         if (
           !Array.isArray(beatIds) ||
           beatIds.length === 0 ||
-          beatIds.length > Object.keys(BEAT_FILES).length ||
-          beatIds.some(
-            id => typeof id !== "string" || !BEAT_FILES[id]
-          ) ||
+          beatIds.length > 50 ||
+          beatIds.some(id => typeof id !== "string") ||
           new Set(beatIds).size !== beatIds.length
         ) {
           return json({
@@ -424,56 +893,65 @@ export default {
             error: "Purchased beats could not be identified."
           }, 400);
         }
-        const beats = beatIds.map(id => ({
-          id,
-          ...BEAT_FILES[id]
-        }));
-        const expectedAmountKobo = beats.reduce(
-          (sum, beat) => sum + beat.price * 100,
-          0
+
+        const beats = [];
+
+        for (const id of beatIds) {
+          const beat = await getBeat(env, id);
+
+          if (!beat || !Number.isSafeInteger(beat.price)) {
+            return json({
+              success: false,
+              error: "Purchased beats could not be identified."
+            }, 400);
+          }
+
+          beats.push({
+            id: beat.id,
+            title: beat.title,
+            price: beat.price
+          });
+        }
+
+        const expectedKobo = beats.reduce(
+          (sum, beat) => sum + beat.price * 100, 0
         );
+
         if (
           !Number.isSafeInteger(Number(transaction.amount)) ||
-          Number(transaction.amount) !== expectedAmountKobo
+          Number(transaction.amount) !== expectedKobo
         ) {
           return json({
             success: false,
             error: "Payment amount does not match the selected beats."
           }, 400);
         }
-        // Create a separate signed download link for every beat.
+
         const purchasedBeats = [];
+
         for (const beat of beats) {
-          const token = await createDownloadToken(
-            {
-              reference,
-              beatId: beat.id,
-              exp: Date.now() + DOWNLOAD_TOKEN_LIFETIME
-            },
-            env.PAYSTACK_SECRET_KEY
-          );
-          const downloadUrl =
-            `${url.origin}/api/download?token=${encodeURIComponent(token)}`;
+          const token = await createDownloadToken({
+            reference,
+            beatId: beat.id,
+            exp: Date.now() + DOWNLOAD_TOKEN_LIFETIME
+          }, env.PAYSTACK_SECRET_KEY);
+
           purchasedBeats.push({
             beatId: beat.id,
             beatTitle: beat.title,
-            downloadUrl
+            downloadUrl: `${url.origin}/api/download?token=${encodeURIComponent(token)}`
           });
         }
+
         return json({
           success: true,
           beats: purchasedBeats,
-          total: beats.reduce(
-            (sum, beat) => sum + beat.price,
-            0
-          ),
+          total: beats.reduce((sum, beat) => sum + beat.price, 0),
           currency: "NGN",
-          ...(purchasedBeats.length === 1
-            ? {
-                beatTitle: purchasedBeats[0].beatTitle,
-                downloadUrl: purchasedBeats[0].downloadUrl
-              }
-            : {})
+          ...(purchasedBeats.length === 1 ? {
+            beatTitle: purchasedBeats[0].beatTitle,
+            downloadUrl: purchasedBeats[0].downloadUrl
+          } : {})
         });
       } catch (error) {
         console.error("Payment verification error:", error);
@@ -483,92 +961,66 @@ export default {
         }, 500);
       }
     }
-    // ==============================
+
     // SECURE DOWNLOAD
-    // ==============================
-    if (
-      url.pathname === "/api/download" &&
-      request.method === "GET"
-    ) {
+    if (path === "/api/download" && request.method === "GET") {
       try {
-        if (!env.PAYSTACK_SECRET_KEY) {
-          return new Response(
-            "Download service is not configured.",
-            { status: 500 }
-          );
+        if (!env.PAYSTACK_SECRET_KEY || !env.BEATS_BUCKET) {
+          return new Response("Download service is not configured.", { status: 500 });
         }
-        if (!env.BEATS_BUCKET) {
-          return new Response(
-            "Download storage is not configured.",
-            { status: 500 }
-          );
-        }
+
         const token = url.searchParams.get("token");
+
         if (!token) {
-          return new Response(
-            "Download token missing.",
-            { status: 400 }
-          );
+          return new Response("Download token missing.", { status: 400 });
         }
-        const data = await verifyDownloadToken(
-          token,
-          env.PAYSTACK_SECRET_KEY
-        );
+
+        const data = await verifyDownloadToken(token, env.PAYSTACK_SECRET_KEY);
+
         if (!data) {
-          return new Response(
-            "Invalid or expired download link.",
-            { status: 403 }
-          );
+          return new Response("Invalid or expired download link.", { status: 403 });
         }
-        const beat = BEAT_FILES[data.beatId];
-        if (!beat) {
-          return new Response(
-            "Beat not found.",
-            { status: 404 }
-          );
+
+        let beat = await getBeat(env, data.beatId);
+
+        // Preserve older purchase links if a record has since been removed.
+        if (!beat && LEGACY_BEATS[data.beatId]) {
+          beat = {
+            id: data.beatId,
+            title: LEGACY_BEATS[data.beatId].title,
+            zip_key: null
+          };
         }
-        let object = null;
-        for (const key of beat.candidates) {
-          const found = await env.BEATS_BUCKET.get(key);
-          if (found) {
-            object = found;
-            break;
-          }
-        }
+
+        if (!beat) return new Response("Beat not found.", { status: 404 });
+
+        const object = await getZipObject(env, beat);
+
         if (!object) {
-          console.error(
-            `R2 ZIP missing for ${beat.title}. Checked:`,
-            beat.candidates
-          );
           return new Response(
             "Beat file not found in storage. Please contact support.",
             { status: 404 }
           );
         }
+
         const headers = new Headers();
         object.writeHttpMetadata(headers);
         headers.set("Content-Type", "application/zip");
         headers.set(
           "Content-Disposition",
-          `attachment; filename="${beat.title}.zip"`
+          `attachment; filename="${safeFilename(beat.title)}.zip"`
         );
         headers.set("Cache-Control", "private, no-store");
         headers.set("X-Content-Type-Options", "nosniff");
-        return new Response(object.body, {
-          status: 200,
-          headers
-        });
+
+        return new Response(object.body, { status: 200, headers });
       } catch (error) {
         console.error("Download error:", error);
-        return new Response(
-          "Download failed. Please try again.",
-          { status: 500 }
-        );
+        return new Response("Download failed. Please try again.", { status: 500 });
       }
     }
-    // ==============================
-    // SERVE WEBSITE
-    // ==============================
+
+    // Serve existing site assets.
     return env.ASSETS.fetch(request);
   }
 };
