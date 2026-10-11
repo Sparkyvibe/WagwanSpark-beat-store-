@@ -1,1 +1,801 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b0a">
+  <title>Sound Lab Admin — WagwanSpark</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090b0a;
+      --panel: #111512;
+      --panel2: #171c18;
+      --line: #28312a;
+      --text: #f2f5f2;
+      --muted: #929c94;
+      --green: #8cff65;
+      --green2: #42d56b;
+      --red: #ff7777;
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(ellipse at 90% 0%, #17301b 0, transparent 34%),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .shell { width: min(1180px, 100% - 32px); margin: auto; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 23px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand { font-weight: 850; letter-spacing: -.7px; font-size: 20px; }
+    .brand span { color: var(--green); }
+    .subbrand { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+    .button {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: var(--text);
+      background: var(--panel2);
+      font-weight: 650;
+    }
+
+    .button:hover { border-color: var(--green); }
+    .button.primary {
+      color: #071008;
+      background: linear-gradient(120deg, var(--green), var(--green2));
+      border: 0;
+    }
+
+    .button.danger { color: var(--red); }
+    .button:disabled { opacity: .5; cursor: wait; }
+
+    main { padding: 30px 0 60px; }
+    .eyebrow {
+      color: var(--green);
+      font-size: 11px;
+      letter-spacing: 2px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    h1 { margin: 5px 0 6px; font-size: clamp(27px, 4vw, 38px); letter-spacing: -1.2px; }
+    h2 { font-size: 18px; margin: 0; }
+    p { color: var(--muted); }
+
+    .intro { margin-bottom: 25px; }
+    .intro p { margin: 0; }
+
+    .panel {
+      background: linear-gradient(145deg, #141915, #0e110f);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 13px;
+      margin-bottom: 20px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      background: #101411;
+      border-radius: 14px;
+      padding: 17px;
+    }
+
+    .stat small { color: var(--muted); display: block; }
+    .stat strong { display: block; font-size: 27px; margin-top: 3px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 15px;
+    }
+
+    .field { min-width: 0; }
+    .field.full { grid-column: 1 / -1; }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: #b7c0b9;
+      font-weight: 700;
+      margin-bottom: 7px;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      min-width: 0;
+      background: #090c0a;
+      color: var(--text);
+      border: 1px solid #303a32;
+      border-radius: 9px;
+      padding: 12px;
+      outline: none;
+    }
+
+    input:focus, textarea:focus, select:focus { border-color: var(--green2); }
+    textarea { min-height: 85px; resize: vertical; }
+    input[type="file"] { padding: 9px; font-size: 12px; }
+    input[type="checkbox"] { width: auto; accent-color: var(--green); }
+
+    .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    .hidden { display: none !important; }
+
+    #notice {
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      background: var(--panel2);
+      border-radius: 10px;
+      margin-bottom: 18px;
+      white-space: pre-wrap;
+    }
+
+    #notice.success { border-color: #2d7140; color: var(--green); }
+    #notice.error { border-color: #793737; color: var(--red); }
+
+    .beat-list { display: grid; gap: 10px; }
+
+    .beat {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 15px;
+      background: #0b0e0c;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    .beat-title { font-weight: 800; }
+    .beat-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .beat-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+    .pill {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      background: #263029;
+      color: #bfc8c0;
+      margin-left: 6px;
+    }
+
+    .pill.published { color: var(--green); background: #193522; }
+    .checkrow { display: flex; align-items: center; gap: 9px; margin-top: 15px; }
+    .checkrow label { margin: 0; }
+
+    .upload-grid { display: grid; gap: 13px; margin-top: 20px; }
+    .upload-row {
+      padding: 15px;
+      background: #0b0e0c;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    .upload-row h3 { margin: 0 0 5px; font-size: 14px; }
+    .upload-row p { font-size: 12px; margin: 0 0 10px; }
+
+    .login-wrap { max-width: 440px; margin: 55px auto; }
+    .login-wrap .panel { padding: 27px; }
+
+    footer { color: #69736b; font-size: 12px; padding: 20px 0 30px; }
+
+    @media (max-width: 650px) {
+      .shell { width: min(100% - 22px, 1180px); }
+      header { padding: 17px 0; }
+      main { padding-top: 23px; }
+      .panel { padding: 16px; }
+      .grid { grid-template-columns: 1fr; }
+      .field.full { grid-column: auto; }
+      .stats { gap: 8px; }
+      .stat { padding: 12px; }
+      .stat strong { font-size: 22px; }
+      .beat { align-items: flex-start; flex-direction: column; }
+      .beat-actions { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <div class="brand">Wagwan<span>Spark</span> ⚡</div>
+        <div class="subbrand">SOUND LAB · ADMIN CONTROL</div>
+      </div>
+      <a class="button" href="/" style="text-decoration:none">View Store ↗</a>
+    </header>
+
+    <main>
+      <div id="notice" class="hidden" role="status" aria-live="polite"></div>
+
+      <section id="loginView" class="login-wrap hidden">
+        <div class="panel">
+          <div class="eyebrow">Restricted access</div>
+          <h1>Admin Login</h1>
+          <p>Sign in to manage your beat catalogue and files.</p>
+          <form id="loginForm">
+            <div class="field">
+              <label for="password">Admin password</label>
+              <input id="password" type="password" autocomplete="current-password" required>
+            </div>
+            <div class="actions">
+              <button class="button primary" type="submit">Sign in</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="dashboard" class="hidden">
+        <div class="intro">
+          <div class="eyebrow">Management console</div>
+          <h1>Your Sound Lab</h1>
+          <p>Manage releases, prices, artwork, previews and customer downloads.</p>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><small>Total beats</small><strong id="totalCount">0</strong></div>
+          <div class="stat"><small>Published</small><strong id="publishedCount">0</strong></div>
+          <div class="stat"><small>Drafts</small><strong id="draftCount">0</strong></div>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2 id="formHeading">Add a beat</h2>
+            <button id="newBeatBtn" class="button" type="button">+ New beat</button>
+          </div>
+
+          <form id="beatForm">
+            <input id="beatIdOriginal" type="hidden">
+
+            <div class="grid">
+              <div class="field">
+                <label for="beatId">Beat ID (URL-safe)</label>
+                <input id="beatId" placeholder="e.g. midnight-run" pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="80" required>
+                <div class="hint">Use lowercase letters, numbers and hyphens. Existing IDs cannot be changed.</div>
+              </div>
+
+              <div class="field">
+                <label for="title">Beat title</label>
+                <input id="title" maxlength="120" required placeholder="MIDNIGHT RUN">
+              </div>
+
+              <div class="field">
+                <label for="genre">Genre</label>
+                <input id="genre" maxlength="80" required placeholder="Afrobeat">
+              </div>
+
+              <div class="field">
+                <label for="price">Price (₦)</label>
+                <input id="price" type="number" min="1" step="1" required value="7000">
+              </div>
+
+              <div class="field">
+                <label for="bpm">BPM</label>
+                <input id="bpm" type="number" min="1" max="400" step="1" placeholder="105">
+              </div>
+
+              <div class="field">
+                <label for="musicalKey">Musical key</label>
+                <input id="musicalKey" maxlength="40" placeholder="A Minor">
+              </div>
+
+              <div class="field full">
+                <label for="description">Description</label>
+                <textarea id="description" maxlength="2000" placeholder="Describe the sound, mood and ideal use..."></textarea>
+              </div>
+            </div>
+
+            <div class="checkrow">
+              <input id="featured" type="checkbox">
+              <label for="featured">Feature this beat in the catalogue</label>
+            </div>
+
+            <div class="actions">
+              <button id="saveDraftBtn" class="button" type="submit">Save as draft</button>
+              <button id="publishBtn" class="button primary" type="button">Save & publish</button>
+              <button id="cancelEditBtn" class="button hidden" type="button">Cancel editing</button>
+            </div>
+          </form>
+
+          <div id="uploadSection" class="upload-grid hidden">
+            <div class="panel-head" style="margin:10px 0 0">
+              <h2>Beat files</h2>
+            </div>
+
+            <div class="upload-row">
+              <h3>01 · Artwork</h3>
+              <p>JPG, PNG or WebP · Maximum 10 MB</p>
+              <form data-kind="artwork" class="uploadForm">
+                <input type="file" name="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
+                <div class="actions"><button class="button" type="submit">Upload artwork</button></div>
+              </form>
+            </div>
+
+            <div class="upload-row">
+              <h3>02 · Preview audio</h3>
+              <p>MP3 or WAV · Maximum 25 MB</p>
+              <form data-kind="preview" class="uploadForm">
+                <input type="file" name="file" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" required>
+                <div class="actions"><button class="button" type="submit">Upload preview</button></div>
+              </form>
+            </div>
+
+            <div class="upload-row">
+              <h3>03 · Download package</h3>
+              <p>Private ZIP containing your MP3 and WAV files · Maximum 100 MB</p>
+              <form data-kind="zip" class="uploadForm">
+                <input type="file" name="file" accept=".zip,application/zip" required>
+                <div class="actions"><button class="button" type="submit">Upload ZIP package</button></div>
+              </form>
+            </div>
+            <p class="hint">Publish only after all three files have uploaded successfully.</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Beat catalogue</h2>
+            <button id="refreshBtn" class="button" type="button">Refresh</button>
+          </div>
+          <div id="beatList" class="beat-list"></div>
+        </section>
+
+        <div class="actions">
+          <button id="logoutBtn" class="button danger" type="button">Sign out</button>
+        </div>
+      </section>
+    </main>
+
+    <footer>WagwanSpark Sound Lab · Private administration</footer>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const $ = id => document.getElementById(id);
+      let csrfToken = "";
+      let beats = [];
+      let currentBeatId = "";
+      let busy = false;
+
+      function notice(message, type = "") {
+        const box = $("notice");
+        box.textContent = message;
+        box.className = type;
+        if (!message) box.classList.add("hidden");
+      }
+
+      function setBusy(value) {
+        busy = value;
+        document.querySelectorAll("button").forEach(button => {
+          button.disabled = value;
+        });
+      }
+
+      async function api(path, options = {}) {
+        const headers = new Headers(options.headers || {});
+        headers.set("Accept", "application/json");
+
+        if (options.body && !(options.body instanceof FormData)) {
+          headers.set("Content-Type", "application/json");
+        }
+
+        if (options.method && !["GET", "HEAD"].includes(options.method)) {
+          if (!csrfToken) throw new Error("Your security session has expired. Sign in again.");
+          headers.set("X-CSRF-Token", csrfToken);
+        }
+
+        const response = await fetch(path, {
+          ...options,
+          headers,
+          credentials: "same-origin",
+          cache: "no-store"
+        });
+
+        const contentType = response.headers.get("content-type") || "";
+        const data = contentType.includes("application/json")
+          ? await response.json()
+          : {};
+
+        if (response.status === 401) {
+          showLogin();
+          throw new Error(data.error || "Please sign in again.");
+        }
+
+        if (!response.ok) {
+          throw new Error(data.error || `Request failed (${response.status}).`);
+        }
+
+        return data;
+      }
+
+      function showLogin() {
+        csrfToken = "";
+        $("dashboard").classList.add("hidden");
+        $("loginView").classList.remove("hidden");
+      }
+
+      async function checkSession() {
+        try {
+          const response = await fetch("/api/admin/session", {
+            credentials: "same-origin",
+            cache: "no-store"
+          });
+          const data = await response.json();
+
+          if (!response.ok || !data.authenticated || !data.csrfToken) {
+            showLogin();
+            return;
+          }
+
+          csrfToken = data.csrfToken;
+          $("loginView").classList.add("hidden");
+          $("dashboard").classList.remove("hidden");
+          await loadBeats();
+        } catch (error) {
+          showLogin();
+          notice("Could not check the admin session. Check your connection and try again.", "error");
+        }
+      }
+
+      $("loginForm").addEventListener("submit", async event => {
+        event.preventDefault();
+        if (busy) return;
+
+        setBusy(true);
+        notice("Signing in...");
+
+        try {
+          const response = await fetch("/api/admin/login", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ password: $("password").value })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || "Sign-in failed.");
+          }
+
+          $("password").value = "";
+          notice("");
+          await checkSession();
+
+          if (!$("dashboard").classList.contains("hidden")) {
+            notice("Signed in successfully.", "success");
+          }
+        } catch (error) {
+          notice(error.message, "error");
+        } finally {
+          setBusy(false);
+        }
+      });
+
+      async function loadBeats() {
+        notice("Loading catalogue...");
+        try {
+          const data = await api("/api/admin/beats");
+          beats = Array.isArray(data.beats) ? data.beats : [];
+          renderBeats();
+          notice("");
+        } catch (error) {
+          notice(error.message, "error");
+        }
+      }
+
+      function renderBeats() {
+        $("totalCount").textContent = beats.length;
+        $("publishedCount").textContent = beats.filter(beat => beat.status === "published").length;
+        $("draftCount").textContent = beats.filter(beat => beat.status !== "published").length;
+
+        const list = $("beatList");
+        list.replaceChildren();
+
+        if (!beats.length) {
+          const empty = document.createElement("p");
+          empty.textContent = "No beats found. Add your first beat above.";
+          list.appendChild(empty);
+          return;
+        }
+
+        beats.forEach(beat => {
+          const card = document.createElement("div");
+          card.className = "beat";
+
+          const info = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "beat-title";
+          title.textContent = beat.title || beat.id;
+
+          const pill = document.createElement("span");
+          pill.className = "pill " + (beat.status === "published" ? "published" : "");
+          pill.textContent = beat.status || "draft";
+          title.appendChild(pill);
+
+          const meta = document.createElement("div");
+          meta.className = "beat-meta";
+          meta.textContent = `${beat.genre || "Genre not set"} · ${beat.bpm || "—"} BPM · ${beat.musical_key || "Key not set"} · ₦${Number(beat.price || 0).toLocaleString("en-NG")}`;
+
+          info.append(title, meta);
+
+          const actions = document.createElement("div");
+          actions.className = "beat-actions";
+
+          const edit = document.createElement("button");
+          edit.className = "button";
+          edit.type = "button";
+          edit.textContent = "Manage";
+          edit.addEventListener("click", () => editBeat(beat.id));
+
+          const remove = document.createElement("button");
+          remove.className = "button danger";
+          remove.type = "button";
+          remove.textContent = "Delete";
+          remove.addEventListener("click", () => deleteBeat(beat.id));
+
+          actions.append(edit, remove);
+          card.append(info, actions);
+          list.appendChild(card);
+        });
+      }
+
+      function resetForm() {
+        $("beatForm").reset();
+        $("beatIdOriginal").value = "";
+        $("beatId").disabled = false;
+        $("price").value = "7000";
+        $("formHeading").textContent = "Add a beat";
+        $("saveDraftBtn").textContent = "Save as draft";
+        $("publishBtn").textContent = "Save & publish";
+        $("cancelEditBtn").classList.add("hidden");
+        $("uploadSection").classList.add("hidden");
+        currentBeatId = "";
+      }
+
+      function editBeat(id) {
+        const beat = beats.find(item => item.id === id);
+        if (!beat) return;
+
+        currentBeatId = id;
+        $("beatIdOriginal").value = id;
+        $("beatId").value = beat.id;
+        $("beatId").disabled = true;
+        $("title").value = beat.title || "";
+        $("genre").value = beat.genre || "";
+        $("price").value = beat.price ?? 7000;
+        $("bpm").value = beat.bpm ?? "";
+        $("musicalKey").value = beat.musical_key || "";
+        $("description").value = beat.description || "";
+        $("featured").checked = Number(beat.featured) === 1;
+
+        $("formHeading").textContent = "Manage: " + beat.title;
+        $("saveDraftBtn").textContent = "Save changes as draft";
+        $("publishBtn").textContent = "Save & publish";
+        $("cancelEditBtn").classList.remove("hidden");
+        $("uploadSection").classList.remove("hidden");
+
+        $("beatForm").scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      async function saveBeat(publish) {
+        const id = $("beatId").value.trim().toLowerCase();
+        const existingId = $("beatIdOriginal").value;
+        const payload = {
+          id,
+          title: $("title").value.trim(),
+          genre: $("genre").value.trim(),
+          price: Number($("price").value),
+          bpm: $("bpm").value,
+          musical_key: $("musicalKey").value.trim(),
+          description: $("description").value.trim(),
+          featured: $("featured").checked ? 1 : 0,
+          status: publish ? "published" : "draft"
+        };
+
+        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+          throw new Error("Use a valid beat ID with lowercase letters, numbers and hyphens.");
+        }
+
+        if (!payload.title || !payload.genre) {
+          throw new Error("Beat title and genre are required.");
+        }
+
+        if (!Number.isSafeInteger(payload.price) || payload.price < 1) {
+          throw new Error("Enter a valid price in naira.");
+        }
+
+        const isEditing = Boolean(existingId);
+
+        if (isEditing) {
+          await api("/api/admin/beats/" + encodeURIComponent(existingId), {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          });
+        } else {
+          if (publish) {
+            throw new Error("First save the beat as a draft, upload all three files, then publish it.");
+          }
+
+          await api("/api/admin/beats", {
+            method: "POST",
+            body: JSON.stringify(payload)
+          });
+          currentBeatId = id;
+          $("beatIdOriginal").value = id;
+          $("beatId").disabled = true;
+          $("formHeading").textContent = "Manage: " + payload.title;
+          $("saveDraftBtn").textContent = "Save changes as draft";
+          $("cancelEditBtn").classList.remove("hidden");
+          $("uploadSection").classList.remove("hidden");
+        }
+
+        await loadBeats();
+
+        if (publish) {
+          resetForm();
+          notice("Beat published successfully.", "success");
+        } else {
+          notice("Draft saved. Upload artwork, preview audio and ZIP before publishing.", "success");
+        }
+      }
+
+      $("beatForm").addEventListener("submit", async event => {
+        event.preventDefault();
+        if (busy) return;
+
+        setBusy(true);
+        try {
+          await saveBeat(false);
+        } catch (error) {
+          notice(error.message, "error");
+        } finally {
+          setBusy(false);
+        }
+      });
+
+      $("publishBtn").addEventListener("click", async () => {
+        if (busy) return;
+
+        if (!$("beatForm").reportValidity()) return;
+
+        setBusy(true);
+        try {
+          await saveBeat(true);
+        } catch (error) {
+          notice(error.message, "error");
+        } finally {
+          setBusy(false);
+        }
+      });
+
+      document.querySelectorAll(".uploadForm").forEach(form => {
+        form.addEventListener("submit", async event => {
+          event.preventDefault();
+          if (busy) return;
+
+          const beatId = currentBeatId || $("beatIdOriginal").value;
+          const fileInput = form.querySelector('input[type="file"]');
+          const file = fileInput.files[0];
+
+          if (!beatId) {
+            notice("Save the beat as a draft before uploading files.", "error");
+            return;
+          }
+
+          if (!file) {
+            notice("Choose a file first.", "error");
+            return;
+          }
+
+          const body = new FormData();
+          body.append("beatId", beatId);
+          body.append("kind", form.dataset.kind);
+          body.append("file", file);
+
+          setBusy(true);
+          notice("Uploading " + form.dataset.kind + "...");
+
+          try {
+            await api("/api/admin/upload", { method: "POST", body });
+            fileInput.value = "";
+            await loadBeats();
+            notice(form.dataset.kind + " uploaded successfully.", "success");
+          } catch (error) {
+            notice(error.message, "error");
+          } finally {
+            setBusy(false);
+          }
+        });
+      });
+
+      async function deleteBeat(id) {
+        const beat = beats.find(item => item.id === id);
+        if (!beat) return;
+
+        const confirmed = confirm(
+          `Delete "${beat.title}"?\n\nThis also deletes its stored artwork, preview and ZIP files. This action cannot be undone.`
+        );
+
+        if (!confirmed || busy) return;
+
+        setBusy(true);
+        try {
+          await api("/api/admin/beats/" + encodeURIComponent(id), {
+            method: "DELETE"
+          });
+
+          if (currentBeatId === id) resetForm();
+
+          await loadBeats();
+          notice("Beat and its stored files deleted.", "success");
+        } catch (error) {
+          notice(error.message, "error");
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      $("newBeatBtn").addEventListener("click", resetForm);
+      $("cancelEditBtn").addEventListener("click", resetForm);
+      $("refreshBtn").addEventListener("click", loadBeats);
+
+      $("logoutBtn").addEventListener("click", async () => {
+        if (busy) return;
+        setBusy(true);
+
+        try {
+          await api("/api/admin/logout", { method: "POST", body: "{}" });
+          showLogin();
+          resetForm();
+          notice("Signed out.", "success");
+        } catch (error) {
+          notice(error.message, "error");
+        } finally {
+          setBusy(false);
+        }
+      });
+
+      checkSession();
+    })();
+  </script>
+</body>
+</html>
