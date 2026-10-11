@@ -4,12 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Payment Successful — WagwanSpark</title>
-
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
@@ -21,152 +17,162 @@
       color: #fff;
       font-family: Arial, sans-serif;
     }
-
     .card {
       width: 100%;
       max-width: 520px;
-      padding: 45px 30px;
+      padding: 40px 26px;
       text-align: center;
       border: 1px solid #292929;
       border-radius: 20px;
       background: #111;
     }
-
-    .icon {
-      font-size: 55px;
-      margin-bottom: 20px;
-    }
-
-    h1 {
-      margin: 0 0 12px;
-      font-size: 32px;
-    }
-
+    .icon { font-size: 48px; margin-bottom: 18px; }
+    h1 { margin: 0 0 12px; font-size: 30px; }
     p {
       color: #aaa;
       line-height: 1.6;
-      margin-bottom: 28px;
+      margin: 0 0 24px;
     }
-
-    .beat {
+    .downloads {
+      display: grid;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .download-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid #303030;
+      border-radius: 12px;
+      background: #191919;
+      text-align: left;
+    }
+    .beat-name {
       color: #fff;
       font-weight: bold;
+      overflow-wrap: anywhere;
     }
-
     .download {
+      flex-shrink: 0;
       display: inline-block;
-      padding: 15px 28px;
-      border-radius: 10px;
+      padding: 12px 15px;
+      border-radius: 8px;
       background: #fff;
       color: #000;
       text-decoration: none;
       font-weight: bold;
+      font-size: 13px;
     }
-
-    .download:hover {
-      opacity: 0.9;
+    .download:hover { opacity: .85; }
+    .error { color: #ff7777; }
+    .loading { color: #aaa; }
+    .note {
+      font-size: 13px;
+      margin: 24px 0 0;
     }
-
-    .error {
-      color: #ff7777;
-    }
-
-    .loading {
-      color: #aaa;
+    @media (max-width: 420px) {
+      .card { padding: 30px 16px; }
+      h1 { font-size: 26px; }
+      .download-item { padding: 12px; }
+      .download { padding: 11px 10px; font-size: 12px; }
     }
   </style>
 </head>
-
 <body>
-
-  <div class="card" id="content">
+  <main class="card" id="content" aria-live="polite">
     <div class="icon">⏳</div>
     <h1>Verifying Payment</h1>
-    <p class="loading">
-      Please wait while we confirm your payment...
-    </p>
-  </div>
-
+    <p class="loading">Please wait while we confirm your payment...</p>
+  </main>
   <script>
     async function verifyPayment() {
       const params = new URLSearchParams(window.location.search);
       const reference = params.get("reference");
-
       const content = document.getElementById("content");
-
       if (!reference) {
         content.innerHTML = `
           <div class="icon">⚠️</div>
           <h1>Payment Reference Missing</h1>
-          <p class="error">
-            We couldn't find your payment reference.
-          </p>
+          <p class="error">We couldn't find your payment reference. Please contact support if you were charged.</p>
         `;
         return;
       }
-
       try {
         const response = await fetch(
-          "/api/verify-payment?reference=" +
-          encodeURIComponent(reference)
+          "/api/verify-payment?reference=" + encodeURIComponent(reference),
+          { cache: "no-store" }
         );
-
         const result = await response.json();
-
         if (!response.ok || !result.success) {
-          throw new Error(
-            result.error || "Payment verification failed"
-          );
+          throw new Error(result.error || "Payment verification failed.");
         }
-
-        content.innerHTML = `
-          <div class="icon">🎉</div>
-
-          <h1>Payment Successful</h1>
-
-          <p>
-            Your purchase of
-            <span class="beat">${result.beatTitle}</span>
-            is confirmed.
-            <br><br>
-            Your beat is ready for download.
-          </p>
-
-          <a
-            class="download"
-            href="${result.downloadUrl}"
-          >
-            DOWNLOAD ZIP
-          </a>
-
-          <p style="font-size:13px; margin-top:25px;">
-            Keep this page until your download is complete.
-          </p>
-        `;
-
+        // Supports both the multi-beat response and the original
+        // single-beat response format.
+        let beats = Array.isArray(result.beats) ? result.beats : [];
+        if (beats.length === 0 && result.downloadUrl) {
+          beats = [{
+            beatTitle: result.beatTitle || "Your beat",
+            downloadUrl: result.downloadUrl
+          }];
+        }
+        if (
+          beats.length === 0 ||
+          beats.some(beat =>
+            typeof beat.beatTitle !== "string" ||
+            typeof beat.downloadUrl !== "string" ||
+            !beat.downloadUrl.startsWith(window.location.origin + "/api/download?")
+          )
+        ) {
+          throw new Error("We couldn't prepare your download links. Please contact support.");
+        }
+        const heading = beats.length === 1
+          ? "Your purchase of 1 beat is confirmed."
+          : `Your purchase of ${beats.length} beats is confirmed.`;
+        const intro = document.createElement("p");
+        intro.textContent = heading + " Your beats are ready for download.";
+        const list = document.createElement("div");
+        list.className = "downloads";
+        beats.forEach(beat => {
+          const item = document.createElement("div");
+          item.className = "download-item";
+          const name = document.createElement("span");
+          name.className = "beat-name";
+          name.textContent = beat.beatTitle;
+          const link = document.createElement("a");
+          link.className = "download";
+          link.href = beat.downloadUrl;
+          link.textContent = "DOWNLOAD ZIP";
+          link.setAttribute("aria-label", `Download ${beat.beatTitle} ZIP`);
+          item.append(name, link);
+          list.appendChild(item);
+        });
+        content.replaceChildren();
+        const icon = document.createElement("div");
+        icon.className = "icon";
+        icon.textContent = "🎉";
+        const title = document.createElement("h1");
+        title.textContent = "Payment Successful";
+        content.append(icon, title, intro, list);
+        const note = document.createElement("p");
+        note.className = "note";
+        note.textContent = "Download each ZIP file you purchased. Keep this page open until your downloads finish.";
+        content.appendChild(note);
       } catch (error) {
-        console.error(error);
-
-        content.innerHTML = `
-          <div class="icon">⚠️</div>
-
-          <h1>Payment Verification Failed</h1>
-
-          <p class="error">
-            We couldn't verify the payment right now.
-            Please don't pay again.
-          </p>
-
-          <p style="font-size:13px;">
-            If money was deducted from your account,
-            contact WagwanSpark with your Paystack reference.
-          </p>
-        `;
+        console.error("Payment verification error:", error);
+        const icon = document.createElement("div");
+        icon.className = "icon";
+        icon.textContent = "⚠️";
+        const title = document.createElement("h1");
+        title.textContent = "Unable to Prepare Downloads";
+        const message = document.createElement("p");
+        message.className = "error";
+        message.textContent = "We couldn't verify your payment or prepare your downloads. Please don't pay again. If you were charged, contact WagwanSpark with your Paystack reference.";
+        content.replaceChildren(icon, title, message);
       }
     }
-
     verifyPayment();
   </script>
-
 </body>
 </html>
