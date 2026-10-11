@@ -1,3 +1,4 @@
+
 name = "wagwanspark-beat-store"
 main = "src/index.js"
 compatibility_date = "2024-01-15"
@@ -10,6 +11,20 @@ binding = "ASSETS"
 binding = "BEATS_BUCKET"
 bucket_name = "wagwanspark-beats"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "wagwanspark-beats-db"
+database_id = "92e11314-8f64-4719-ae7c-e7dde302ac13"
+
 [env.production]
 name = "wagwanspark-beat-store-prod"
 route = "example.com/*"
+
+[[env.production.r2_buckets]]
+binding = "BEATS_BUCKET"
+bucket_name = "wagwanspark-beats"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "wagwanspark-beats-db"
+database_id = "92e11314-8f64-4719-ae7c-e7dde302ac13"
