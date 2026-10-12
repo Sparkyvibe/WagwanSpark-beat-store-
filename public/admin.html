@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,7 +20,9 @@
       --red: #ff7777;
       --radius: 16px;
     }
+
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
       background:
@@ -28,9 +31,12 @@
       color: var(--text);
       font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
+
     button, input, textarea, select { font: inherit; }
     button { cursor: pointer; }
+
     .shell { width: min(1180px, 100% - 32px); margin: auto; }
+
     header {
       display: flex;
       align-items: center;
@@ -39,9 +45,11 @@
       padding: 23px 0;
       border-bottom: 1px solid var(--line);
     }
+
     .brand { font-weight: 850; letter-spacing: -.7px; font-size: 20px; }
     .brand span { color: var(--green); }
     .subbrand { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
     .button {
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -50,15 +58,20 @@
       background: var(--panel2);
       font-weight: 650;
     }
+
     .button:hover { border-color: var(--green); }
+
     .button.primary {
       color: #071008;
       background: linear-gradient(120deg, var(--green), var(--green2));
       border: 0;
     }
+
     .button.danger { color: var(--red); }
-    .button:disabled { opacity: .5; cursor: wait; }
+    .button:disabled { opacity: .5; cursor: not-allowed; }
+
     main { padding: 30px 0 60px; }
+
     .eyebrow {
       color: var(--green);
       font-size: 11px;
@@ -66,15 +79,18 @@
       font-weight: 800;
       text-transform: uppercase;
     }
+
     h1 {
       margin: 5px 0 6px;
       font-size: clamp(27px, 4vw, 38px);
       letter-spacing: -1.2px;
     }
+
     h2 { font-size: 18px; margin: 0; }
     p { color: var(--muted); }
     .intro { margin-bottom: 25px; }
     .intro p { margin: 0; }
+
     .panel {
       background: linear-gradient(145deg, #141915, #0e110f);
       border: 1px solid var(--line);
@@ -82,6 +98,7 @@
       padding: 22px;
       margin-bottom: 20px;
     }
+
     .panel-head {
       display: flex;
       align-items: center;
@@ -89,27 +106,33 @@
       gap: 14px;
       margin-bottom: 18px;
     }
+
     .stats {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 13px;
       margin-bottom: 20px;
     }
+
     .stat {
       border: 1px solid var(--line);
       background: #101411;
       border-radius: 14px;
       padding: 17px;
     }
+
     .stat small { color: var(--muted); display: block; }
     .stat strong { display: block; font-size: 27px; margin-top: 3px; }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 15px;
     }
+
     .field { min-width: 0; }
     .field.full { grid-column: 1 / -1; }
+
     label {
       display: block;
       font-size: 12px;
@@ -117,6 +140,7 @@
       font-weight: 700;
       margin-bottom: 7px;
     }
+
     input, textarea, select {
       width: 100%;
       min-width: 0;
@@ -127,15 +151,26 @@
       padding: 12px;
       outline: none;
     }
+
     input:focus, textarea:focus, select:focus {
       border-color: var(--green2);
     }
+
     textarea { min-height: 85px; resize: vertical; }
     input[type="file"] { padding: 9px; font-size: 12px; }
     input[type="checkbox"] { width: auto; accent-color: var(--green); }
+
     .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
-    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+
     .hidden { display: none !important; }
+
     #notice {
       padding: 12px 14px;
       border: 1px solid var(--line);
@@ -144,9 +179,12 @@
       margin-bottom: 18px;
       white-space: pre-wrap;
     }
+
     #notice.success { border-color: #2d7140; color: var(--green); }
     #notice.error { border-color: #793737; color: var(--red); }
+
     .beat-list { display: grid; gap: 10px; }
+
     .beat {
       display: flex;
       align-items: center;
@@ -157,14 +195,17 @@
       border: 1px solid var(--line);
       border-radius: 12px;
     }
+
     .beat-title { font-weight: 800; }
     .beat-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
     .beat-actions {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
       justify-content: flex-end;
     }
+
     .pill {
       display: inline-block;
       padding: 3px 8px;
@@ -176,27 +217,48 @@
       color: #bfc8c0;
       margin-left: 6px;
     }
+
     .pill.published { color: var(--green); background: #193522; }
     .pill.category { color: #c5d4c8; background: #202922; }
+
     .checkrow {
       display: flex;
       align-items: center;
       gap: 9px;
       margin-top: 15px;
     }
+
     .checkrow label { margin: 0; }
+
     .upload-grid { display: grid; gap: 13px; margin-top: 20px; }
+
     .upload-row {
       padding: 15px;
       background: #0b0e0c;
       border: 1px solid var(--line);
       border-radius: 12px;
     }
+
     .upload-row h3 { margin: 0 0 5px; font-size: 14px; }
     .upload-row p { font-size: 12px; margin: 0 0 10px; }
+
+    .audio-preview {
+      width: 100%;
+      display: block;
+      margin-top: 12px;
+      accent-color: var(--green);
+    }
+
+    .preview-status {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
     .login-wrap { max-width: 440px; margin: 55px auto; }
     .login-wrap .panel { padding: 27px; }
     footer { color: #69736b; font-size: 12px; padding: 20px 0 30px; }
+
     @media (max-width: 650px) {
       .shell { width: min(100% - 22px, 1180px); }
       header { padding: 17px 0; }
@@ -212,6 +274,7 @@
     }
   </style>
 </head>
+
 <body>
   <div class="shell">
     <header>
@@ -221,13 +284,16 @@
       </div>
       <a class="button" href="/" style="text-decoration:none">View Store ↗</a>
     </header>
+
     <main>
       <div id="notice" class="hidden" role="status" aria-live="polite"></div>
+
       <section id="loginView" class="login-wrap hidden">
         <div class="panel">
           <div class="eyebrow">Restricted access</div>
           <h1>Admin Login</h1>
           <p>Sign in to manage your products and files.</p>
+
           <form id="loginForm">
             <div class="field">
               <label for="password">Admin password</label>
@@ -239,24 +305,29 @@
           </form>
         </div>
       </section>
+
       <section id="dashboard" class="hidden">
         <div class="intro">
           <div class="eyebrow">Management console</div>
           <h1>Your Sound Lab</h1>
           <p>Manage Beats, Samples, Studio Tools, prices, artwork and customer downloads.</p>
         </div>
+
         <div class="stats">
           <div class="stat"><small>Total products</small><strong id="totalCount">0</strong></div>
           <div class="stat"><small>Published</small><strong id="publishedCount">0</strong></div>
           <div class="stat"><small>Drafts</small><strong id="draftCount">0</strong></div>
         </div>
+
         <section class="panel">
           <div class="panel-head">
             <h2 id="formHeading">Add a product</h2>
             <button id="newBeatBtn" class="button" type="button">+ New product</button>
           </div>
+
           <form id="beatForm">
             <input id="beatIdOriginal" type="hidden">
+
             <div class="grid">
               <div class="field">
                 <label for="category">Product category</label>
@@ -267,77 +338,104 @@
                 </select>
                 <div class="hint">Choose where this product belongs in your store.</div>
               </div>
+
               <div class="field">
                 <label for="beatId">Product ID (URL-safe)</label>
                 <input id="beatId" placeholder="e.g. midnight-run" pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="80" required>
                 <div class="hint">Use lowercase letters, numbers and hyphens. Existing IDs cannot be changed.</div>
               </div>
+
               <div class="field">
                 <label for="title">Product title</label>
                 <input id="title" maxlength="120" required placeholder="MIDNIGHT RUN">
               </div>
+
               <div class="field">
                 <label for="genre">Genre / type</label>
                 <input id="genre" maxlength="80" required placeholder="Afrobeat, Drum Kit, Plugin Preset...">
               </div>
+
               <div class="field">
                 <label for="price">Price (₦)</label>
                 <input id="price" type="number" min="1" step="1" required value="7000">
               </div>
+
               <div class="field">
                 <label for="bpm">BPM (optional)</label>
                 <input id="bpm" type="number" min="1" max="400" step="1" placeholder="105">
               </div>
+
               <div class="field">
                 <label for="musicalKey">Musical key (optional)</label>
                 <input id="musicalKey" maxlength="40" placeholder="A Minor">
               </div>
+
               <div class="field full">
                 <label for="description">Description</label>
                 <textarea id="description" maxlength="2000" placeholder="Describe the sound, contents, mood and ideal use..."></textarea>
               </div>
             </div>
+
             <div class="checkrow">
               <input id="featured" type="checkbox">
               <label for="featured">Feature this product in the catalogue</label>
             </div>
+
             <div class="actions">
               <button id="saveDraftBtn" class="button" type="submit">Save as draft</button>
-              <button id="publishBtn" class="button primary" type="button">Save & publish</button>
+              <button id="publishBtn" class="button primary" type="button">Save &amp; publish</button>
               <button id="cancelEditBtn" class="button hidden" type="button">Cancel editing</button>
             </div>
           </form>
+
           <div id="uploadSection" class="upload-grid hidden">
             <div class="panel-head" style="margin:10px 0 0">
               <h2>Product files</h2>
             </div>
+
             <div class="upload-row">
               <h3>01 · Artwork</h3>
               <p>JPG, PNG or WebP · Maximum 10 MB · Required for all categories</p>
               <form data-kind="artwork" class="uploadForm">
                 <input type="file" name="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
-                <div class="actions"><button class="button" type="submit">Upload artwork</button></div>
+                <div class="actions">
+                  <button class="button" type="submit">Upload artwork</button>
+                </div>
               </form>
             </div>
+
             <div id="previewUploadRow" class="upload-row">
               <h3>02 · Preview audio</h3>
-              <p>MP3 or WAV · Maximum 25 MB · Required for Beats only</p>
-              <form data-kind="preview" class="uploadForm">
-                <input type="file" name="file" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" required>
-                <div class="actions"><button class="button" type="submit">Upload preview</button></div>
+              <p>MP3 or WAV · Maximum 25 MB · Required for Beats; optional for Samples and Studio Tools</p>
+
+              <form id="previewUploadForm" data-kind="preview" class="uploadForm">
+                <input id="previewFileInput" type="file" name="file" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" required>
+
+                <div class="actions">
+                  <button id="previewSelectedBtn" class="button" type="button">▶ Preview selected audio</button>
+                  <button class="button primary" type="submit">Upload preview</button>
+                </div>
+
+                <audio id="selectedAudioPlayer" class="audio-preview hidden" controls preload="metadata"></audio>
+                <div id="selectedAudioStatus" class="preview-status">Choose an MP3 or WAV file to preview it before uploading.</div>
               </form>
             </div>
+
             <div class="upload-row">
               <h3>03 · Download package</h3>
               <p>Private ZIP containing your product files · Maximum 100 MB · Required for all categories</p>
               <form data-kind="zip" class="uploadForm">
                 <input type="file" name="file" accept=".zip,application/zip" required>
-                <div class="actions"><button class="button" type="submit">Upload ZIP package</button></div>
+                <div class="actions">
+                  <button class="button" type="submit">Upload ZIP package</button>
+                </div>
               </form>
             </div>
+
             <p id="uploadHint" class="hint">Beats require artwork, preview audio and ZIP. Samples and Studio Tools require artwork and ZIP; preview audio is optional.</p>
           </div>
         </section>
+
         <section class="panel">
           <div class="panel-head">
             <h2>Product catalogue</h2>
@@ -345,101 +443,135 @@
           </div>
           <div id="beatList" class="beat-list"></div>
         </section>
+
         <div class="actions">
           <button id="logoutBtn" class="button danger" type="button">Sign out</button>
         </div>
       </section>
     </main>
+
     <footer>WagwanSpark Sound Lab · Private administration</footer>
   </div>
+
   <script>
     (() => {
       "use strict";
+
       const $ = id => document.getElementById(id);
+
       let csrfToken = "";
       let beats = [];
       let currentBeatId = "";
       let busy = false;
+      let selectedAudioUrl = "";
+      let catalogueAudio = null;
+
       const CATEGORY_LABELS = {
         "beats": "Beats",
         "samples": "Samples",
         "studio-tools": "Studio Tools"
       };
+
       function notice(message, type = "") {
         const box = $("notice");
         box.textContent = message;
         box.className = type;
         if (!message) box.classList.add("hidden");
       }
+
       function setBusy(value) {
         busy = value;
         document.querySelectorAll("button").forEach(button => {
           button.disabled = value;
         });
       }
+
       async function api(path, options = {}) {
         const headers = new Headers(options.headers || {});
         headers.set("Accept", "application/json");
+
         if (options.body && !(options.body instanceof FormData)) {
           headers.set("Content-Type", "application/json");
         }
+
         if (options.method && !["GET", "HEAD"].includes(options.method)) {
           if (!csrfToken) {
             throw new Error("Your security session has expired. Sign in again.");
           }
           headers.set("X-CSRF-Token", csrfToken);
         }
+
         const response = await fetch(path, {
           ...options,
           headers,
           credentials: "same-origin",
           cache: "no-store"
         });
+
         const contentType = response.headers.get("content-type") || "";
         const data = contentType.includes("application/json")
           ? await response.json()
           : {};
+
         if (response.status === 401) {
           showLogin();
           throw new Error(data.error || "Please sign in again.");
         }
+
         if (!response.ok) {
           throw new Error(data.error || `Request failed (${response.status}).`);
         }
+
         return data;
       }
+
       function showLogin() {
         csrfToken = "";
         $("dashboard").classList.add("hidden");
         $("loginView").classList.remove("hidden");
       }
+
       function updateCategoryUI() {
         const category = $("category").value;
         const isBeat = category === "beats";
-        $("previewUploadRow").classList.toggle("hidden", !isBeat);
+
+        // Preview upload is available for every category.
+        $("previewUploadRow").classList.remove("hidden");
+
         if (isBeat) {
           $("uploadHint").textContent =
             "Beats require artwork, preview audio and ZIP before publishing.";
         } else {
           $("uploadHint").textContent =
-            `${CATEGORY_LABELS[category]} require artwork and ZIP before publishing. Preview audio is optional.`;
+            `${CATEGORY_LABELS[category]} require artwork and ZIP before publishing. Preview audio is optional, but recommended so customers can listen before buying.`;
         }
+
         if (!currentBeatId) {
           $("formHeading").textContent =
-            "Add " + (isBeat ? "a beat" : category === "samples" ? "a sample product" : "a Studio Tools product");
+            "Add " + (
+              isBeat
+                ? "a beat"
+                : category === "samples"
+                  ? "a sample product"
+                  : "a Studio Tools product"
+            );
         }
       }
+
       async function checkSession() {
         try {
           const response = await fetch("/api/admin/session", {
             credentials: "same-origin",
             cache: "no-store"
           });
+
           const data = await response.json();
+
           if (!response.ok || !data.authenticated || !data.csrfToken) {
             showLogin();
             return;
           }
+
           csrfToken = data.csrfToken;
           $("loginView").classList.add("hidden");
           $("dashboard").classList.remove("hidden");
@@ -449,11 +581,14 @@
           notice("Could not check the admin session. Check your connection and try again.", "error");
         }
       }
+
       $("loginForm").addEventListener("submit", async event => {
         event.preventDefault();
         if (busy) return;
+
         setBusy(true);
         notice("Signing in...");
+
         try {
           const response = await fetch("/api/admin/login", {
             method: "POST",
@@ -464,13 +599,17 @@
             },
             body: JSON.stringify({ password: $("password").value })
           });
+
           const data = await response.json();
+
           if (!response.ok || !data.success) {
             throw new Error(data.error || "Sign-in failed.");
           }
+
           $("password").value = "";
           notice("");
           await checkSession();
+
           if (!$("dashboard").classList.contains("hidden")) {
             notice("Signed in successfully.", "success");
           }
@@ -480,8 +619,10 @@
           setBusy(false);
         }
       });
+
       async function loadBeats() {
         notice("Loading catalogue...");
+
         try {
           const data = await api("/api/admin/beats");
           beats = Array.isArray(data.beats) ? data.beats : [];
@@ -491,58 +632,187 @@
           notice(error.message, "error");
         }
       }
+
+      function getPreviewUrl(product) {
+        // Use a preview URL if the API includes one.
+        const candidates = [
+          product.previewAudio,
+          product.preview_audio,
+          product.previewAudioUrl,
+          product.preview_audio_url,
+          product.previewUrl,
+          product.preview_url
+        ];
+
+        const url = candidates.find(value =>
+          typeof value === "string" && value.trim()
+        );
+
+        if (url) return url;
+
+        // The media route follows the existing artwork route convention.
+        // This fallback works only if the Worker exposes /api/media/:id/preview.
+        if (product.preview_uploaded || product.has_preview) {
+          return `/api/media/${encodeURIComponent(product.id)}/preview`;
+        }
+
+        return "";
+      }
+
+      function stopCatalogueAudio() {
+        if (catalogueAudio) {
+          catalogueAudio.pause();
+          catalogueAudio.currentTime = 0;
+          catalogueAudio = null;
+        }
+      }
+
+      function playCataloguePreview(product, button) {
+        const url = getPreviewUrl(product);
+
+        if (!url) {
+          notice(
+            "No preview URL was returned for this product. Upload the preview audio, then refresh the catalogue.",
+            "error"
+          );
+          return;
+        }
+
+        if (catalogueAudio && catalogueAudio.dataset.productId === product.id) {
+          if (catalogueAudio.paused) {
+            catalogueAudio.play().catch(() => {
+              notice("The preview could not be played. Check the preview audio URL and file format.", "error");
+            });
+          } else {
+            catalogueAudio.pause();
+          }
+          return;
+        }
+
+        stopCatalogueAudio();
+
+        const audio = new Audio(url);
+        audio.preload = "metadata";
+        audio.dataset.productId = product.id;
+        catalogueAudio = audio;
+
+        audio.addEventListener("error", () => {
+          notice(
+            "The preview file could not be loaded. Confirm that the Worker provides a playable preview URL for this product.",
+            "error"
+          );
+        }, { once: true });
+
+        audio.play().then(() => {
+          notice("Playing preview: " + (product.title || product.id), "success");
+        }).catch(() => {
+          notice(
+            "The preview could not be played. Check that a preview file has been uploaded and its URL is accessible.",
+            "error"
+          );
+        });
+      }
+
       function renderBeats() {
         $("totalCount").textContent = beats.length;
         $("publishedCount").textContent =
           beats.filter(beat => beat.status === "published").length;
         $("draftCount").textContent =
           beats.filter(beat => beat.status !== "published").length;
+
         const list = $("beatList");
         list.replaceChildren();
+
         if (!beats.length) {
           const empty = document.createElement("p");
           empty.textContent = "No products found. Add your first product above.";
           list.appendChild(empty);
           return;
         }
+
         beats.forEach(beat => {
           const card = document.createElement("div");
           card.className = "beat";
+
           const info = document.createElement("div");
+
           const title = document.createElement("div");
           title.className = "beat-title";
           title.textContent = beat.title || beat.id;
+
           const categoryPill = document.createElement("span");
           categoryPill.className = "pill category";
           categoryPill.textContent = CATEGORY_LABELS[beat.category] || "Beats";
+
           const statusPill = document.createElement("span");
           statusPill.className =
             "pill " + (beat.status === "published" ? "published" : "");
           statusPill.textContent = beat.status || "draft";
+
           title.append(categoryPill, statusPill);
+
           const meta = document.createElement("div");
           meta.className = "beat-meta";
           meta.textContent =
             `${beat.genre || "Type not set"} · ${beat.bpm || "—"} BPM · ${beat.musical_key || "Key not set"} · ₦${Number(beat.price || 0).toLocaleString("en-NG")}`;
+
           info.append(title, meta);
+
           const actions = document.createElement("div");
           actions.className = "beat-actions";
+
+          const previewUrl = getPreviewUrl(beat);
+
+          if (previewUrl) {
+            const preview = document.createElement("button");
+            preview.className = "button";
+            preview.type = "button";
+            preview.textContent = "▶ Preview";
+            preview.addEventListener("click", () => {
+              playCataloguePreview(beat, preview);
+            });
+            actions.appendChild(preview);
+          }
+
           const edit = document.createElement("button");
           edit.className = "button";
           edit.type = "button";
           edit.textContent = "Manage";
           edit.addEventListener("click", () => editBeat(beat.id));
+
           const remove = document.createElement("button");
           remove.className = "button danger";
           remove.type = "button";
           remove.textContent = "Delete";
           remove.addEventListener("click", () => deleteBeat(beat.id));
+
           actions.append(edit, remove);
           card.append(info, actions);
           list.appendChild(card);
         });
       }
+
+      function stopSelectedPreview() {
+        const player = $("selectedAudioPlayer");
+
+        player.pause();
+        player.removeAttribute("src");
+        player.load();
+        player.classList.add("hidden");
+
+        if (selectedAudioUrl) {
+          URL.revokeObjectURL(selectedAudioUrl);
+          selectedAudioUrl = "";
+        }
+
+        $("selectedAudioStatus").textContent =
+          "Choose an MP3 or WAV file to preview it before uploading.";
+      }
+
       function resetForm() {
+        stopSelectedPreview();
+        stopCatalogueAudio();
+
         $("beatForm").reset();
         $("beatIdOriginal").value = "";
         $("beatId").disabled = false;
@@ -554,12 +824,18 @@
         $("publishBtn").textContent = "Save & publish";
         $("cancelEditBtn").classList.add("hidden");
         $("uploadSection").classList.add("hidden");
+
         currentBeatId = "";
         updateCategoryUI();
       }
+
       function editBeat(id) {
         const beat = beats.find(item => item.id === id);
         if (!beat) return;
+
+        stopSelectedPreview();
+        stopCatalogueAudio();
+
         currentBeatId = id;
         $("beatIdOriginal").value = id;
         $("beatId").value = beat.id;
@@ -573,17 +849,21 @@
         $("musicalKey").value = beat.musical_key || "";
         $("description").value = beat.description || "";
         $("featured").checked = Number(beat.featured) === 1;
+
         $("formHeading").textContent = "Manage: " + (beat.title || beat.id);
         $("saveDraftBtn").textContent = "Save changes as draft";
         $("publishBtn").textContent = "Save & publish";
         $("cancelEditBtn").classList.remove("hidden");
         $("uploadSection").classList.remove("hidden");
+
         updateCategoryUI();
         $("beatForm").scrollIntoView({ behavior: "smooth", block: "start" });
       }
+
       async function saveBeat(publish) {
         const id = $("beatId").value.trim().toLowerCase();
         const existingId = $("beatIdOriginal").value;
+
         const payload = {
           id,
           category: $("category").value,
@@ -596,19 +876,25 @@
           featured: $("featured").checked ? 1 : 0,
           status: publish ? "published" : "draft"
         };
+
         if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
           throw new Error("Use a valid product ID with lowercase letters, numbers and hyphens.");
         }
+
         if (!["beats", "samples", "studio-tools"].includes(payload.category)) {
           throw new Error("Choose a valid product category.");
         }
+
         if (!payload.title || !payload.genre) {
           throw new Error("Product title and genre/type are required.");
         }
+
         if (!Number.isSafeInteger(payload.price) || payload.price < 1) {
           throw new Error("Enter a valid price in naira.");
         }
+
         const isEditing = Boolean(existingId);
+
         if (isEditing) {
           await api("/api/admin/beats/" + encodeURIComponent(existingId), {
             method: "PATCH",
@@ -620,10 +906,12 @@
               "First save the product as a draft, upload its required files, then publish it."
             );
           }
+
           await api("/api/admin/beats", {
             method: "POST",
             body: JSON.stringify(payload)
           });
+
           currentBeatId = id;
           $("beatIdOriginal").value = id;
           $("beatId").disabled = true;
@@ -632,7 +920,9 @@
           $("cancelEditBtn").classList.remove("hidden");
           $("uploadSection").classList.remove("hidden");
         }
+
         await loadBeats();
+
         if (publish) {
           resetForm();
           notice("Product published successfully.", "success");
@@ -640,14 +930,18 @@
           const message = payload.category === "beats"
             ? "Draft saved. Upload artwork, preview audio and ZIP before publishing."
             : "Draft saved. Upload artwork and ZIP before publishing. Preview audio is optional for this category.";
+
           notice(message, "success");
           updateCategoryUI();
         }
       }
+
       $("beatForm").addEventListener("submit", async event => {
         event.preventDefault();
         if (busy) return;
+
         setBusy(true);
+
         try {
           await saveBeat(false);
         } catch (error) {
@@ -656,10 +950,13 @@
           setBusy(false);
         }
       });
+
       $("publishBtn").addEventListener("click", async () => {
         if (busy) return;
         if (!$("beatForm").reportValidity()) return;
+
         setBusy(true);
+
         try {
           await saveBeat(true);
         } catch (error) {
@@ -668,32 +965,111 @@
           setBusy(false);
         }
       });
+
+      // Preview a selected local file before uploading it.
+      $("previewFileInput").addEventListener("change", () => {
+        stopSelectedPreview();
+
+        const file = $("previewFileInput").files[0];
+        if (!file) return;
+
+        const allowedTypes = [
+          "audio/mpeg",
+          "audio/mp3",
+          "audio/wav",
+          "audio/x-wav"
+        ];
+
+        const validExtension = /\.(mp3|wav)$/i.test(file.name);
+        if (!validExtension && !allowedTypes.includes(file.type)) {
+          $("previewFileInput").value = "";
+          notice("Choose an MP3 or WAV audio file.", "error");
+          return;
+        }
+
+        if (file.size > 25 * 1024 * 1024) {
+          $("previewFileInput").value = "";
+          notice("Preview audio must be no larger than 25 MB.", "error");
+          return;
+        }
+
+        selectedAudioUrl = URL.createObjectURL(file);
+
+        const player = $("selectedAudioPlayer");
+        player.src = selectedAudioUrl;
+        player.classList.remove("hidden");
+        player.load();
+
+        $("selectedAudioStatus").textContent =
+          `Ready to preview: ${file.name}`;
+
+        notice("");
+      });
+
+      $("previewSelectedBtn").addEventListener("click", async () => {
+        const player = $("selectedAudioPlayer");
+
+        if (!selectedAudioUrl || !player.src) {
+          notice("Choose an audio file first, then click Preview selected audio.", "error");
+          return;
+        }
+
+        try {
+          if (player.paused) {
+            await player.play();
+          } else {
+            player.pause();
+          }
+        } catch (error) {
+          notice("The selected audio could not be played by this browser.", "error");
+        }
+      });
+
       document.querySelectorAll(".uploadForm").forEach(form => {
         form.addEventListener("submit", async event => {
           event.preventDefault();
           if (busy) return;
+
           const productId = currentBeatId || $("beatIdOriginal").value;
           const fileInput = form.querySelector('input[type="file"]');
           const file = fileInput.files[0];
+
           if (!productId) {
             notice("Save the product as a draft before uploading files.", "error");
             return;
           }
+
           if (!file) {
             notice("Choose a file first.", "error");
             return;
           }
+
           const body = new FormData();
           body.append("beatId", productId);
           body.append("kind", form.dataset.kind);
           body.append("file", file);
+
           setBusy(true);
           notice("Uploading " + form.dataset.kind + "...");
+
           try {
-            await api("/api/admin/upload", { method: "POST", body });
+            await api("/api/admin/upload", {
+              method: "POST",
+              body
+            });
+
             fileInput.value = "";
+
+            if (form.dataset.kind === "preview") {
+              stopSelectedPreview();
+            }
+
             await loadBeats();
-            notice(form.dataset.kind + " uploaded successfully.", "success");
+
+            notice(
+              form.dataset.kind + " uploaded successfully.",
+              "success"
+            );
           } catch (error) {
             notice(error.message, "error");
           } finally {
@@ -701,19 +1077,26 @@
           }
         });
       });
+
       async function deleteBeat(id) {
         const beat = beats.find(item => item.id === id);
         if (!beat) return;
+
         const confirmed = confirm(
           `Delete "${beat.title}"?\n\nThis also deletes its stored artwork, preview and ZIP files. This action cannot be undone.`
         );
+
         if (!confirmed || busy) return;
+
         setBusy(true);
+
         try {
           await api("/api/admin/beats/" + encodeURIComponent(id), {
             method: "DELETE"
           });
+
           if (currentBeatId === id) resetForm();
+
           await loadBeats();
           notice("Product and its stored files deleted.", "success");
         } catch (error) {
@@ -722,18 +1105,23 @@
           setBusy(false);
         }
       }
+
       $("category").addEventListener("change", updateCategoryUI);
       $("newBeatBtn").addEventListener("click", resetForm);
       $("cancelEditBtn").addEventListener("click", resetForm);
       $("refreshBtn").addEventListener("click", loadBeats);
+
       $("logoutBtn").addEventListener("click", async () => {
         if (busy) return;
+
         setBusy(true);
+
         try {
           await api("/api/admin/logout", {
             method: "POST",
             body: "{}"
           });
+
           showLogin();
           resetForm();
           notice("Signed out.", "success");
@@ -743,6 +1131,12 @@
           setBusy(false);
         }
       });
+
+      window.addEventListener("beforeunload", () => {
+        stopSelectedPreview();
+        stopCatalogueAudio();
+      });
+
       updateCategoryUI();
       checkSession();
     })();
