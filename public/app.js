@@ -1,1568 +1,443 @@
+/*
+ * WAGWANSPARK — MULTI-CATEGORY STOREFRONT
+ * Compatible with the existing index.html, samples.html and studio-tools.html.
+ * Supports beats, sample packs, studio tools, audio previews, cart and Paystack.
+ */
+(() => {
+  "use strict";
 
-/* ==========================================
-   WAGWANSPARK — BEAT STORE APPLICATION
-   Beats • Samples • Studio Tools
-   ========================================== */
-
-const CART_STORAGE_KEY = "wagwanspark_cart_v1";
-
-const API = {
-  beats: "/api/beats",
-  products: "/api/products",
-  payment: "/api/create-payment"
-};
-
-let BEATS_CATALOG = [];
-let SAMPLE_CATALOG = [];
-let STUDIO_TOOLS_CATALOG = [];
-
-function loadSavedCart() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || "[]");
-    return Array.isArray(saved)
-      ? [...new Set(saved.filter(item => typeof item === "string"))]
-      : [];
-  } catch (error) {
-    console.error("Unable to restore cart:", error);
-    return [];
-  }
-}
-
-const state = {
-  allBeats: [],
-  filteredBeats: [],
-  currentPage: 1,
-  beatsPerPage: 24,
-  selectedGenre: "all",
-  searchQuery: "",
-  currentBeat: null,
-  availableGenres: [],
-  cart: loadSavedCart(),
-  checkoutInProgress: false
-};
-
-/* ==========================================
-   DOM ELEMENTS
-   ========================================== */
-
-const beatsGrid = document.getElementById("beatsGrid");
-const paginationContainer = document.getElementById("pagination");
-const genreFilter = document.getElementById("genreFilter");
-const filterButtonsContainer = document.querySelector(".filter-buttons");
-
-const beatSearchInput =
-  document.getElementById("searchInput") ||
-  document.getElementById("beatSearch");
-
-const playerModal = document.getElementById("playerModal");
-const closePlayer = document.getElementById("closePlayer");
-const audioPlayer = document.getElementById("audioPlayer");
-
-const playBtn =
-  document.getElementById("playPauseBtn") ||
-  document.getElementById("playBtn");
-
-const progressInput =
-  document.getElementById("progressBar") ||
-  document.getElementById("progressInput");
-
-const currentTimeEl = document.getElementById("currentTime");
-const durationEl = document.getElementById("duration");
-
-const navbarToggle = document.getElementById("navbarToggle");
-const navMenu = document.getElementById("navMenu");
-
-const cartToggle = document.getElementById("cartToggle");
-const cartCount = document.getElementById("cartCount");
-const cartOverlay = document.getElementById("cartOverlay");
-const cartDrawer = document.getElementById("cartDrawer");
-const closeCartButton = document.getElementById("closeCart");
-const cartItemsContainer = document.getElementById("cartItems");
-const cartEmpty = document.getElementById("cartEmpty");
-const cartSummary = document.getElementById("cartSummary");
-const cartItemLabel = document.getElementById("cartItemLabel");
-const cartSummaryCount = document.getElementById("cartSummaryCount");
-const cartTotal = document.getElementById("cartTotal");
-const checkoutBtn = document.getElementById("checkoutBtn");
-
-const continueShoppingButton =
-  document.getElementById("continueShopping");
-
-const cartContinueShoppingButton =
-  document.getElementById("cartContinueShopping");
-
-/* ==========================================
-   GENERAL HELPERS
-   ========================================== */
-
-async function fetchJSON(url, options = {}) {
-  const response = await fetch(url, {
-    cache: "no-store",
-    ...options,
-    headers: {
-      Accept: "application/json",
-      ...(options.headers || {})
-    }
-  });
-
-  let result;
-
-  try {
-    result = await response.json();
-  } catch {
-    throw new Error(`Invalid server response from ${url}.`);
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      result.message || `${url} returned HTTP ${response.status}.`
-    );
-  }
-
-  return result;
-}
-
-function mediaURL(id, type) {
-  return `/api/media/${encodeURIComponent(id)}/${type}`;
-}
-
-function formatNaira(amount) {
-  return `₦${Number(amount || 0).toLocaleString("en-NG")}`;
-}
-
-function escapeHtml(value) {
-  const map = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;"
+  const API = {
+    beats: "/api/beats",
+    products: "/api/products",
+    payment: "/api/create-payment"
+  };
+  const CART_STORAGE_KEY = "wagwanspark-cart-v3";
+  const CATEGORIES = ["beats", "samples", "studio-tools"];
+  const state = {
+    products: { beats: [], samples: [], "studio-tools": [] },
+    cart: [],
+    activePreview: null,
+    activeFilter: "all",
+    search: ""
   };
 
-  return String(value ?? "").replace(/[&<>"']/g, character => map[character]);
-}
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const safeText = value => String(value ?? "");
+  const escapeHtml = value => safeText(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[char]));
+  const money = value => new Intl.NumberFormat("en-NG", {
+    style: "currency", currency: "NGN", maximumFractionDigits: 0
+  }).format(Number(value) || 0);
+  const cartKey = product => product.category === "beats" ? product.id : `${product.category}:${product.id}`;
+  const categoryLabel = category => category === "studio-tools" ? "Studio Tool" : category === "samples" ? "Sample Pack" : "Beat";
 
-function getFormatLabel(product) {
-  return (
-    Array.isArray(product.formats) && product.formats.length
-      ? product.formats
-      : ["Digital Download"]
-  ).join(" + ");
-}
-
-function isPublishedProduct(product) {
-  return Boolean(
-    product.id &&
-    product.title &&
-    product.price > 0 &&
-    product.available &&
-    product.status.toLowerCase() === "published"
-  );
-}
-
-/* ==========================================
-   PRODUCT NORMALIZATION
-   ========================================== */
-
-function normalizeProduct(product, category) {
-  const id = String(product.id || "").trim();
-
-  const previewKey = String(
-    product.preview_key ||
-    product.previewKey ||
-    ""
-  ).trim();
-
-  const suppliedPreview = String(
-    product.previewAudio ||
-    product.preview_audio ||
-    product.preview_url ||
-    ""
-  ).trim();
-
-  /*
-   * Samples use the Worker preview route when a preview key exists.
-   * A supplied preview URL takes precedence.
-   */
-  const previewAudio = suppliedPreview ||
-    (category === "samples" && previewKey
-      ? mediaURL(id, "preview")
-      : "");
-
-  return {
-    id,
-    category,
-    title: String(product.title || "").trim(),
-    genre: String(product.genre || product.category || category).trim(),
-    bpm: Number(product.bpm) || 0,
-    key: String(product.musical_key || product.key || "").trim(),
-    price: Number(product.price) || 0,
-
-    artwork: product.artwork
-      ? String(product.artwork)
-      : mediaURL(id, "artwork"),
-
-    preview_key: previewKey,
-    previewAudio,
-
-    description: String(product.description || "").trim(),
-
-    formats: Array.isArray(product.formats) && product.formats.length
-      ? product.formats
-      : ["Digital Download"],
-
-    featured:
-      product.featured === true ||
-      Number(product.featured) === 1,
-
-    available:
-      product.available === undefined
-        ? true
-        : product.available === true ||
-          product.available === 1 ||
-          product.available === "1",
-
-    status: String(product.status || "published")
-  };
-}
-
-/* ==========================================
-   CATALOGUE LOADING
-   ========================================== */
-
-async function loadLiveCatalogue() {
-  try {
-    const data = await fetchJSON(API.beats);
-
-    if (!Array.isArray(data.beats)) {
-      throw new Error("Invalid beats catalogue response.");
-    }
-
-    BEATS_CATALOG = data.beats
-      .map(beat => normalizeProduct(beat, "beats"))
-      .filter(isPublishedProduct);
-
-    console.log("Published beats loaded:", BEATS_CATALOG.length);
-  } catch (error) {
-    console.error("Could not load live beats:", error);
-    BEATS_CATALOG = [];
+  function normalizeProduct(raw, category = "beats") {
+    const item = { ...raw };
+    item.id = safeText(item.id);
+    item.title = safeText(item.title || item.name || item.id);
+    item.category = CATEGORIES.includes(item.category) ? item.category : category;
+    item.genre = safeText(item.genre || item.type || categoryLabel(item.category));
+    item.description = safeText(item.description);
+    item.price = Number(item.price) || 0;
+    item.bpm = item.bpm === null || item.bpm === undefined || item.bpm === "" ? null : Number(item.bpm);
+    item.musical_key = safeText(item.musical_key || item.musicalKey || "");
+    item.status = safeText(item.status || "published").toLowerCase();
+    item.artwork = safeText(item.artwork || item.artworkUrl || "");
+    item.previewAudio = safeText(item.previewAudio || item.preview_audio || item.previewUrl || "");
+    item.formats = Array.isArray(item.formats) ? item.formats : ["ZIP"];
+    return item;
   }
-}
 
-async function loadCategory(category) {
-  try {
-    const data = await fetchJSON(
-      `${API.products}?category=${encodeURIComponent(category)}`
-    );
-
-    if (!Array.isArray(data.products)) {
-      throw new Error(`Invalid ${category} catalogue response.`);
-    }
-
-    const products = data.products
-      .map(product => normalizeProduct(product, category))
-      .filter(isPublishedProduct);
-
-    console.log(`${category} loaded:`, products.length);
-    return products;
-  } catch (error) {
-    console.error(`Could not load ${category}:`, error);
-    return [];
+  async function getJson(url) {
+    const response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
+    let data;
+    try { data = await response.json(); } catch { throw new Error("The store returned an unreadable response."); }
+    if (!response.ok) throw new Error(data.error || "Unable to load the store.");
+    return data;
   }
-}
 
-/* ==========================================
-   CATEGORY SECTIONS
-   ========================================== */
-
-function prepareCategorySections() {
-  const categories = [
-    {
-      id: "samples",
-      gridId: "samplesGrid",
-      messageId: "samplesMessage"
-    },
-    {
-      id: "studio-tools",
-      gridId: "studioToolsGrid",
-      messageId: "studioToolsMessage"
+  async function loadCatalogues() {
+    const results = await Promise.allSettled([
+      getJson(API.beats),
+      getJson(`${API.products}?category=samples`),
+      getJson(`${API.products}?category=studio-tools`)
+    ]);
+    if (results[0].status === "fulfilled") {
+      const data = results[0].value;
+      state.products.beats = (data.beats || data.products || []).map(item => normalizeProduct(item, "beats"));
+    } else {
+      console.error("Beat catalogue could not load:", results[0].reason);
+      showMessage("beatsGrid", "Beats are temporarily unavailable. Please refresh in a moment.");
     }
-  ];
+    ["samples", "studio-tools"].forEach((category, index) => {
+      const result = results[index + 1];
+      if (result.status === "fulfilled") {
+        const data = result.value;
+        state.products[category] = (data.products || data.beats || []).map(item => normalizeProduct(item, category));
+      } else {
+        console.error(`${category} catalogue could not load:`, result.reason);
+        state.products[category] = [];
+      }
+    });
+    renderAll();
+  }
 
-  categories.forEach(category => {
-    const section = document.getElementById(category.id);
+  function showMessage(gridId, message) {
+    const grid = document.getElementById(gridId);
+    if (grid) grid.innerHTML = `<div class="catalogue-message"><p>${escapeHtml(message)}</p></div>`;
+  }
 
+  function productArtwork(product) {
+    return product.artwork || `/api/media/${encodeURIComponent(product.id)}/artwork`;
+  }
+
+  function productCard(product, category = product.category) {
+    const key = cartKey(product);
+    const inCart = state.cart.includes(key);
+    const previewAvailable = Boolean(product.previewAudio);
+    const metadata = [];
+    if (product.genre) metadata.push(`<span>${escapeHtml(product.genre)}</span>`);
+    if (product.bpm) metadata.push(`<span>${escapeHtml(product.bpm)} BPM</span>`);
+    if (product.musical_key) metadata.push(`<span>${escapeHtml(product.musical_key)}</span>`);
+    const description = product.description ? `<p class="product-description">${escapeHtml(product.description)}</p>` : "";
+    const previewButton = category === "studio-tools" ? "" : `<button type="button" class="btn btn-secondary product-preview-btn" data-action="preview" data-id="${escapeHtml(product.id)}" data-category="${escapeHtml(category)}" ${previewAvailable ? "" : "disabled title=\"Upload a preview audio file in Admin to enable playback\""}>${previewAvailable ? '<i class="fas fa-play"></i> Preview Audio' : '<i class="fas fa-volume-mute"></i> Preview Unavailable'}</button>`;
+    return `
+      <article class="beat-card product-card" data-product-id="${escapeHtml(product.id)}" data-category="${escapeHtml(category)}">
+        <div class="beat-artwork product-artwork">
+          <img src="${escapeHtml(productArtwork(product))}" alt="${escapeHtml(product.title)} artwork" loading="lazy" onerror="this.onerror=null;this.src='';this.parentElement.classList.add('artwork-placeholder');">
+          <span class="product-category-label">${escapeHtml(categoryLabel(category))}</span>
+        </div>
+        <div class="beat-info product-info">
+          <div class="beat-title-row"><h3>${escapeHtml(product.title)}</h3><strong class="product-price">${money(product.price)}</strong></div>
+          <div class="beat-meta product-meta">${metadata.join("")}</div>
+          ${description}
+          <p class="product-format">${category === "beats" ? "MP3 / WAV" : category === "samples" ? "Digital sample pack" : "Digital studio tool"}</p>
+          <div class="product-actions">
+            ${previewButton}
+            <button type="button" class="btn btn-primary product-add-btn" data-action="add" data-id="${escapeHtml(product.id)}" data-category="${escapeHtml(category)}">${inCart ? '<i class="fas fa-check"></i> Added to Cart' : '<i class="fas fa-cart-plus"></i> Add to Cart'}</button>
+            <button type="button" class="btn btn-primary product-buy-btn" data-action="buy" data-id="${escapeHtml(product.id)}" data-category="${escapeHtml(category)}"><i class="fas fa-lock"></i> Buy Now</button>
+          </div>
+        </div>
+      </article>`;
+  }
+
+  function ensureCategorySection(category) {
+    const gridId = category === "samples" ? "samplesGrid" : "studioToolsGrid";
+    let grid = document.getElementById(gridId);
+    if (grid) return grid;
+    const sectionId = category === "samples" ? "samples" : "studio-tools";
+    let section = document.getElementById(sectionId);
     if (!section) {
-      console.error(`Missing HTML section: #${category.id}`);
+      section = document.createElement("section");
+      section.className = "beats-section product-category-section";
+      section.id = sectionId;
+      const footer = $(".footer");
+      document.body.insertBefore(section, footer || null);
+    }
+    const comingSoon = $(".category-coming-soon", section);
+    if (comingSoon) comingSoon.remove();
+    if (!$ (".section-header", section)) {
+      const title = category === "samples" ? "Sample Packs" : "Studio Tools";
+      section.insertAdjacentHTML("afterbegin", `<div class="section-header"><p class="section-subtitle">WAGWANSPARK SOUND LAB</p><h2>${title}</h2><p>Explore the catalogue and add products to your cart.</p></div>`);
+    }
+    grid = document.createElement("div");
+    grid.className = "beats-grid product-grid";
+    grid.id = gridId;
+    section.appendChild(grid);
+    return grid;
+  }
+
+  function renderBeats() {
+    const grid = document.getElementById("beatsGrid");
+    if (!grid) return;
+    const query = state.search.trim().toLowerCase();
+    const items = state.products.beats.filter(product => {
+      const matchesGenre = state.activeFilter === "all" || product.genre.toLowerCase() === state.activeFilter;
+      const searchable = `${product.title} ${product.genre} ${product.description} ${product.musical_key}`.toLowerCase();
+      return matchesGenre && (!query || searchable.includes(query));
+    });
+    grid.innerHTML = items.length ? items.map(item => productCard(item, "beats")).join("") : `<div class="catalogue-message"><p>${state.products.beats.length ? "No beats match your search." : "No beats are currently published."}</p></div>`;
+    const genreFilter = document.getElementById("genreFilter");
+    if (genreFilter) {
+      const current = genreFilter.value || state.activeFilter;
+      const genres = [...new Set(state.products.beats.map(item => item.genre).filter(Boolean))].sort();
+      genreFilter.innerHTML = `<option value="all">All Genres</option>${genres.map(genre => `<option value="${escapeHtml(genre.toLowerCase())}">${escapeHtml(genre)}</option>`).join("")}`;
+      genreFilter.value = ["all", ...genres.map(g => g.toLowerCase())].includes(current) ? current : "all";
+    }
+    const pagination = document.getElementById("pagination");
+    if (pagination) pagination.innerHTML = "";
+  }
+
+  function renderProductCategory(category) {
+    const gridId = category === "samples" ? "samplesGrid" : "studioToolsGrid";
+    const grid = ensureCategorySection(category);
+    const items = state.products[category] || [];
+    grid.innerHTML = items.length ? items.map(item => productCard(item, category)).join("") : `<div class="catalogue-message"><p>${category === "samples" ? "No sample packs are published yet. Publish a sample pack in Admin to display it here." : "No Studio Tools are published yet. Publish a product in Admin to display it here."}</p></div>`;
+  }
+
+  function findProduct(id, category) {
+    return (state.products[category] || []).find(product => product.id === id);
+  }
+
+  function saveCart() {
+    try { localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.cart)); } catch (error) { console.warn("Cart could not be saved.", error); }
+  }
+
+  function loadCart() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || "[]");
+      state.cart = Array.isArray(saved) ? saved.filter(key => typeof key === "string") : [];
+    } catch { state.cart = []; }
+  }
+
+  function getCartProducts() {
+    const all = CATEGORIES.flatMap(category => state.products[category] || []);
+    const byKey = new Map(all.map(product => [cartKey(product), product]));
+    state.cart = state.cart.filter(key => byKey.has(key));
+    return state.cart.map(key => byKey.get(key));
+  }
+
+  function addToCart(product, openDrawer = true) {
+    if (!product) return;
+    const key = cartKey(product);
+    if (!state.cart.includes(key)) state.cart.push(key);
+    saveCart();
+    renderAll();
+    if (openDrawer) openCart();
+  }
+
+  function removeFromCart(key) {
+    state.cart = state.cart.filter(item => item !== key);
+    saveCart();
+    renderAll();
+  }
+
+  function renderCart() {
+    const products = getCartProducts();
+    const count = products.length;
+    const total = products.reduce((sum, item) => sum + item.price, 0);
+    const cartCount = document.getElementById("cartCount");
+    if (cartCount) cartCount.textContent = String(count);
+    const itemLabel = document.getElementById("cartItemLabel");
+    if (itemLabel) itemLabel.textContent = `${count} ${count === 1 ? "item" : "items"}`;
+    const summaryCount = document.getElementById("cartSummaryCount");
+    if (summaryCount) summaryCount.textContent = String(count);
+    const cartTotal = document.getElementById("cartTotal");
+    if (cartTotal) cartTotal.textContent = money(total);
+    const cartEmpty = document.getElementById("cartEmpty");
+    if (cartEmpty) cartEmpty.style.display = count ? "none" : "block";
+    const cartSummary = document.getElementById("cartSummary");
+    if (cartSummary) cartSummary.style.display = count ? "block" : "none";
+    const cartItems = document.getElementById("cartItems");
+    if (cartItems) {
+      cartItems.innerHTML = products.map(product => `
+        <div class="cart-item">
+          <img class="cart-item-image" src="${escapeHtml(productArtwork(product))}" alt="" onerror="this.style.display='none'">
+          <div class="cart-item-info"><h4>${escapeHtml(product.title)}</h4><p>${escapeHtml(categoryLabel(product.category))}</p><strong>${money(product.price)}</strong></div>
+          <button type="button" class="cart-item-remove" data-remove="${escapeHtml(cartKey(product))}" aria-label="Remove ${escapeHtml(product.title)}"><i class="fas fa-trash"></i></button>
+        </div>`).join("");
+    }
+    $$("[data-action='add']").forEach(button => {
+      const product = findProduct(button.dataset.id, button.dataset.category);
+      if (product) button.innerHTML = state.cart.includes(cartKey(product)) ? '<i class="fas fa-check"></i> Added to Cart' : '<i class="fas fa-cart-plus"></i> Add to Cart';
+    });
+  }
+
+  function openCart() {
+    const drawer = document.getElementById("cartDrawer");
+    const overlay = document.getElementById("cartOverlay");
+    if (drawer) { drawer.classList.add("active", "open"); drawer.setAttribute("aria-hidden", "false"); }
+    if (overlay) { overlay.classList.add("active", "open"); overlay.setAttribute("aria-hidden", "false"); }
+    const toggle = document.getElementById("cartToggle");
+    if (toggle) toggle.setAttribute("aria-expanded", "true");
+    document.body.classList.add("cart-open");
+  }
+
+  function closeCart() {
+    const drawer = document.getElementById("cartDrawer");
+    const overlay = document.getElementById("cartOverlay");
+    if (drawer) { drawer.classList.remove("active", "open"); drawer.setAttribute("aria-hidden", "true"); }
+    if (overlay) { overlay.classList.remove("active", "open"); overlay.setAttribute("aria-hidden", "true"); }
+    const toggle = document.getElementById("cartToggle");
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("cart-open");
+  }
+
+  function openPreview(product) {
+    if (!product || !product.previewAudio) {
+      alert("Preview audio is not available for this product yet. Upload a preview audio file in Admin, then refresh the store.");
       return;
     }
-
-    section.querySelector(".category-coming-soon")?.remove();
-
-    let grid = document.getElementById(category.gridId);
-
-    if (!grid) {
-      grid = document.createElement("div");
-      grid.id = category.gridId;
-      grid.className = "beats-grid product-category-grid";
-
-      const header = section.querySelector(".section-header");
-
-      if (header) {
-        header.insertAdjacentElement("afterend", grid);
-      } else {
-        section.appendChild(grid);
-      }
+    const modal = document.getElementById("playerModal");
+    const audio = document.getElementById("audioPlayer");
+    if (!modal || !audio) {
+      window.open(product.previewAudio, "_blank", "noopener,noreferrer");
+      return;
     }
-
-    let message = document.getElementById(category.messageId);
-
-    if (!message) {
-      message = document.createElement("p");
-      message.id = category.messageId;
-      message.className = "store-category-message";
-      message.style.cssText =
-        "padding:20px 0;color:var(--text-secondary,#aaa);";
-
-      grid.insertAdjacentElement("afterend", message);
-    }
-  });
-}
-
-/* ==========================================
-   CART ITEM IDENTIFIERS
-   ========================================== */
-
-/*
- * Beat IDs retain their original format for compatibility.
- * Other products use category:id so IDs cannot collide.
- */
-
-function cartKey(product) {
-  return product.category === "beats"
-    ? product.id
-    : `${product.category}:${product.id}`;
-}
-
-function parseCartKey(key) {
-  const separator = key.indexOf(":");
-
-  if (separator === -1) {
-    return {
-      category: "beats",
-      id: key
-    };
-  }
-
-  return {
-    category: key.slice(0, separator),
-    id: key.slice(separator + 1)
-  };
-}
-
-function getCatalogue(category) {
-  if (category === "beats") return state.allBeats;
-  if (category === "samples") return SAMPLE_CATALOG;
-  if (category === "studio-tools") return STUDIO_TOOLS_CATALOG;
-  return [];
-}
-
-function findCartProduct(key) {
-  const parsed = parseCartKey(key);
-
-  return getCatalogue(parsed.category).find(
-    product => product.id === parsed.id
-  );
-}
-
-function getCartProducts() {
-  const products = state.cart
-    .map(findCartProduct)
-    .filter(Boolean);
-
-  const validKeys = products.map(cartKey);
-
-  if (
-    validKeys.length !== state.cart.length ||
-    new Set(state.cart).size !== state.cart.length
-  ) {
-    state.cart = [...new Set(validKeys)];
-    saveCart();
-  }
-
-  return products;
-}
-
-/* ==========================================
-   RENDER SAMPLES AND STUDIO TOOLS
-   ========================================== */
-
-function renderProductCategory(products, category) {
-  const isSamples = category === "samples";
-
-  const gridId = isSamples ? "samplesGrid" : "studioToolsGrid";
-  const messageId = isSamples ? "samplesMessage" : "studioToolsMessage";
-
-  const grid = document.getElementById(gridId);
-  const message = document.getElementById(messageId);
-
-  if (!grid) {
-    console.error(`Missing product grid: #${gridId}`);
-    return;
-  }
-
-  grid.innerHTML = "";
-
-  if (!products.length) {
-    if (message) {
-      message.textContent = isSamples
-        ? "No published sample packs are available yet."
-        : "No published studio tools are available yet.";
-    }
-
-    return;
-  }
-
-  if (message) message.textContent = "";
-
-  products.forEach(product => {
-    const card = document.createElement("article");
-    card.className = "beat-card product-card";
-
-    const image = document.createElement("img");
-    image.className = "beat-product-artwork";
-    image.src = product.artwork;
-    image.alt = product.title;
-    image.loading = "lazy";
-    image.style.cssText =
-      "width:100%;aspect-ratio:1/1;object-fit:cover;display:block;";
-
-    image.addEventListener("error", () => {
-      image.onerror = null;
-      image.src = "/images/placeholder.jpg";
+    const title = document.getElementById("playerTitle");
+    const genre = document.getElementById("playerGenre");
+    const image = document.getElementById("playerImage");
+    const artwork = document.getElementById("playerArtwork");
+    if (title) title.textContent = product.title;
+    if (genre) genre.textContent = `${categoryLabel(product.category)}${product.genre ? ` · ${product.genre}` : ""}`;
+    if (image) image.src = productArtwork(product);
+    if (artwork) artwork.classList.remove("artwork-placeholder");
+    audio.pause();
+    audio.src = product.previewAudio;
+    audio.load();
+    state.activePreview = product;
+    modal.classList.add("active", "open");
+    modal.setAttribute("aria-hidden", "false");
+    audio.play().then(updatePlayButton).catch(error => {
+      console.warn("Preview playback failed:", error);
+      alert("The preview file could not be played. Check that the uploaded file is a valid MP3 or WAV and try again.");
+      updatePlayButton();
     });
-
-    const info = document.createElement("div");
-    info.className = "beat-info";
-
-    const title = document.createElement("h3");
-    title.className = "beat-title";
-    title.textContent = product.title;
-
-    const description = document.createElement("p");
-    description.className = "product-description";
-    description.textContent = product.description ||
-      (isSamples ? "Digital sample pack" : "Studio production tool");
-
-    const format = document.createElement("p");
-    format.className = "product-format";
-    format.textContent = `Format: ${getFormatLabel(product)}`;
-
-    const price = document.createElement("div");
-    price.className = "beat-price";
-    price.textContent = formatNaira(product.price);
-
-    info.append(title, description, format, price);
-
-    if (isSamples) {
-      const previewButton = document.createElement("button");
-      previewButton.type = "button";
-      previewButton.className = "buy-btn product-preview-btn";
-      previewButton.innerHTML =
-        '<i class="fas fa-play"></i> Preview Audio';
-
-      previewButton.addEventListener("click", () => {
-        openProductPreview(product);
-      });
-
-      info.appendChild(previewButton);
-    }
-
-    const addButton = document.createElement("button");
-    addButton.type = "button";
-    addButton.className = "buy-btn add-to-cart-btn";
-
-    function updateAddButton() {
-      const added = state.cart.includes(cartKey(product));
-
-      addButton.innerHTML = added
-        ? '<i class="fas fa-check"></i> Added to Cart'
-        : '<i class="fas fa-cart-plus"></i> Add to Cart';
-
-      addButton.setAttribute("aria-pressed", String(added));
-    }
-
-    updateAddButton();
-
-    addButton.addEventListener("click", () => {
-      addProductToCart(product);
-      updateAddButton();
-    });
-
-    info.appendChild(addButton);
-
-    const note = document.createElement("p");
-    note.className = "product-purchase-note";
-    note.style.cssText = "font-size:12px;opacity:.7;margin-top:10px;";
-    note.textContent = isSamples
-      ? "Digital sample pack • Secure checkout"
-      : "Digital studio resource • Secure checkout";
-
-    info.appendChild(note);
-
-    card.append(image, info);
-    grid.appendChild(card);
-  });
-}
-
-/* ==========================================
-   SAMPLE PREVIEW
-   ========================================== */
-
-async function openProductPreview(product) {
-  if (!product.previewAudio) {
-    alert(
-      "No preview file is linked to this sample yet. Upload a preview audio file in Admin and publish the sample."
-    );
-    return;
   }
 
-  if (!audioPlayer || !playerModal) {
-    alert("The audio player is not available on this page.");
-    return;
-  }
-
-  state.currentBeat = product;
-
-  const elements = getPlayerElements();
-
-  if (elements.title) elements.title.textContent = product.title;
-  if (elements.genre) elements.genre.textContent = "Sample Preview";
-
-  if (elements.bpm) {
-    elements.bpm.textContent = product.bpm ? `${product.bpm} BPM` : "";
-  }
-
-  if (elements.key) elements.key.textContent = product.key || "";
-
-  if (elements.artwork) {
-    elements.artwork.src = product.artwork;
-    elements.artwork.alt = product.title;
-  }
-
-  audioPlayer.pause();
-  audioPlayer.currentTime = 0;
-  audioPlayer.src = product.previewAudio;
-  audioPlayer.load();
-
-  if (progressInput) {
-    progressInput.value = 0;
-    progressInput.max = 100;
-  }
-
-  if (currentTimeEl) currentTimeEl.textContent = "0:00";
-  if (durationEl) durationEl.textContent = "0:00";
-  if (elements.progress) elements.progress.style.width = "0%";
-
-  playerModal.classList.add("active");
-  playerModal.setAttribute("aria-hidden", "false");
-
-  updatePlayButton();
-
-  try {
-    await audioPlayer.play();
-  } catch (error) {
-    console.error("Sample preview could not play:", error);
-
-    alert(
-      "The preview file could not be played. Check that the preview was uploaded correctly and that its Worker media route is working."
-    );
-
+  function closePreview() {
+    const modal = document.getElementById("playerModal");
+    const audio = document.getElementById("audioPlayer");
+    if (audio) { audio.pause(); audio.removeAttribute("src"); audio.load(); }
+    if (modal) { modal.classList.remove("active", "open"); modal.setAttribute("aria-hidden", "true"); }
+    state.activePreview = null;
     updatePlayButton();
   }
-}
 
-/* ==========================================
-   GENRE MANAGEMENT
-   ========================================== */
-
-function buildAvailableGenres() {
-  state.availableGenres = [
-    ...new Set(state.allBeats.map(beat => beat.genre).filter(Boolean))
-  ].sort();
-}
-
-function renderGenreSelect() {
-  if (!genreFilter) return;
-
-  genreFilter.innerHTML = "";
-
-  const allOption = document.createElement("option");
-  allOption.value = "all";
-  allOption.textContent = "All Genres";
-  genreFilter.appendChild(allOption);
-
-  state.availableGenres.forEach(genre => {
-    const option = document.createElement("option");
-    option.value = genre;
-    option.textContent = genre;
-    genreFilter.appendChild(option);
-  });
-
-  genreFilter.value = state.selectedGenre;
-}
-
-function renderFilterButtons() {
-  if (!filterButtonsContainer) return;
-
-  const options = [
-    { key: "all", label: "All" },
-    { key: "Hip-Hop", label: "Hip-Hop" },
-    { key: "Trap", label: "Trap" },
-    { key: "R&B", label: "R&B" },
-    { key: "Afrobeat", label: "Afrobeat" },
-    { key: "Afro Fusion", label: "Afro Fusion" },
-    { key: "Afro House", label: "Afro House" },
-    { key: "Amapiano", label: "Amapiano" }
-  ];
-
-  filterButtonsContainer.innerHTML = "";
-
-  options.forEach(option => {
-    if (
-      option.key !== "all" &&
-      !state.availableGenres.includes(option.key)
-    ) return;
-
-    const button = document.createElement("button");
-
-    button.type = "button";
-    button.className =
-      `filter-btn ${option.key === state.selectedGenre ? "active" : ""}`;
-    button.dataset.filter = option.key;
-    button.textContent = option.label;
-
-    button.addEventListener("click", () => {
-      state.selectedGenre = option.key;
-      state.currentPage = 1;
-      updateFilterButtons();
-      applyFilters();
-      renderBeats();
-    });
-
-    filterButtonsContainer.appendChild(button);
-  });
-}
-
-function updateFilterButtons() {
-  document.querySelectorAll(".filter-btn").forEach(button => {
-    button.classList.toggle(
-      "active",
-      button.dataset.filter === state.selectedGenre
-    );
-  });
-}
-
-/* ==========================================
-   BEAT SEARCH AND FILTERS
-   ========================================== */
-
-function applyFilters() {
-  let filtered = [...state.allBeats];
-
-  if (state.selectedGenre !== "all") {
-    filtered = filtered.filter(
-      beat => beat.genre === state.selectedGenre
-    );
+  function updatePlayButton() {
+    const audio = document.getElementById("audioPlayer");
+    const button = document.getElementById("playPauseBtn");
+    if (!audio || !button) return;
+    button.innerHTML = audio.paused ? '<i class="fas fa-play"></i>' : '<i class="fas fa-pause"></i>';
+    button.setAttribute("aria-label", audio.paused ? "Play preview" : "Pause preview");
   }
 
-  if (state.searchQuery.trim()) {
-    const query = state.searchQuery.toLowerCase();
-
-    filtered = filtered.filter(beat =>
-      beat.title.toLowerCase().includes(query) ||
-      beat.genre.toLowerCase().includes(query) ||
-      beat.key.toLowerCase().includes(query) ||
-      String(beat.bpm).includes(query) ||
-      beat.description.toLowerCase().includes(query)
-    );
+  function formatTime(seconds) {
+    if (!Number.isFinite(seconds)) return "0:00";
+    const value = Math.max(0, Math.floor(seconds));
+    return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
   }
 
-  state.filteredBeats = filtered;
-  state.currentPage = 1;
-}
-
-function handleSearch(query) {
-  state.searchQuery = query;
-  applyFilters();
-  renderBeats();
-}
-
-function getPaginatedBeats() {
-  const start = (state.currentPage - 1) * state.beatsPerPage;
-
-  return state.filteredBeats.slice(
-    start,
-    start + state.beatsPerPage
-  );
-}
-
-function getTotalPages() {
-  return Math.ceil(state.filteredBeats.length / state.beatsPerPage);
-}
-
-/* ==========================================
-   BEAT CARDS
-   ========================================== */
-
-function renderBeats() {
-  if (!beatsGrid) return;
-
-  beatsGrid.innerHTML = "";
-
-  if (paginationContainer) {
-    paginationContainer.innerHTML = "";
-  }
-
-  if (!state.filteredBeats.length) {
-    displayNoResultsMessage();
-    return;
-  }
-
-  getPaginatedBeats().forEach(beat => {
-    beatsGrid.appendChild(createBeatCard(beat));
-  });
-
-  const totalPages = getTotalPages();
-
-  if (totalPages > 1) {
-    renderPaginationControls(totalPages);
-  }
-}
-
-function createBeatCard(beat) {
-  const card = document.createElement("div");
-  card.className = "beat-card";
-
-  const added = state.cart.includes(beat.id);
-  const formatLabel = getFormatLabel(beat);
-
-  card.innerHTML = `
-    <div class="beat-artwork" role="button" tabindex="0"
-      aria-label="Play ${escapeHtml(beat.title)} preview">
-      <img src="${escapeHtml(beat.artwork)}"
-        alt="${escapeHtml(beat.title)}" loading="lazy">
-      <div class="play-overlay">
-        <div class="play-btn-overlay">
-          <i class="fas fa-play"></i>
-        </div>
-      </div>
-    </div>
-
-    <div class="beat-info">
-      <h3 class="beat-title">${escapeHtml(beat.title)}</h3>
-
-      <div class="beat-meta">
-        <span class="beat-meta-item">
-          <i class="fas fa-music"></i> ${escapeHtml(beat.genre)}
-        </span>
-        <span class="beat-meta-item">
-          <i class="fas fa-tachometer-alt"></i> ${beat.bpm} BPM
-        </span>
-        <span class="beat-meta-item">
-          <i class="fas fa-key"></i> ${escapeHtml(beat.key)}
-        </span>
-      </div>
-
-      <div class="beat-format-row">
-        <span class="beat-format-badge">
-          <i class="fas fa-file-audio"></i>
-          ${escapeHtml(formatLabel)}
-        </span>
-        <span class="beat-download-note">Digital download</span>
-      </div>
-
-      <div class="beat-price">${formatNaira(beat.price)}</div>
-
-      <button class="buy-btn add-to-cart-btn" type="button"
-        data-beat-id="${escapeHtml(beat.id)}">
-        <i class="fas ${added ? "fa-check" : "fa-cart-plus"}"></i>
-        ${added ? "Added to Cart" : "Add to Cart"}
-      </button>
-    </div>
-  `;
-
-  const artwork = card.querySelector(".beat-artwork");
-  const image = card.querySelector(".beat-artwork img");
-
-  image.addEventListener("error", () => {
-    image.onerror = null;
-    image.src = "/images/placeholder.jpg";
-  });
-
-  artwork.addEventListener("click", () => openPlayer(beat));
-
-  artwork.addEventListener("keydown", event => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      openPlayer(beat);
-    }
-  });
-
-  card.querySelector(".add-to-cart-btn").addEventListener("click", event => {
-    event.stopPropagation();
-    addProductToCart(beat);
-  });
-
-  return card;
-}
-
-function renderPaginationControls(totalPages) {
-  const container = paginationContainer || beatsGrid;
-  const pagination = document.createElement("div");
-  pagination.className = "pagination-controls";
-
-  const previous = document.createElement("button");
-  previous.type = "button";
-  previous.textContent = "← Previous";
-  previous.disabled = state.currentPage === 1;
-
-  const info = document.createElement("span");
-  info.textContent = `Page ${state.currentPage} of ${totalPages}`;
-
-  const next = document.createElement("button");
-  next.type = "button";
-  next.textContent = "Next →";
-  next.disabled = state.currentPage === totalPages;
-
-  previous.addEventListener("click", () => {
-    if (state.currentPage > 1) {
-      state.currentPage--;
-      renderBeats();
-
-      beatsGrid.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
-    }
-  });
-
-  next.addEventListener("click", () => {
-    if (state.currentPage < totalPages) {
-      state.currentPage++;
-      renderBeats();
-
-      beatsGrid.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
-    }
-  });
-
-  pagination.append(previous, info, next);
-  container.appendChild(pagination);
-}
-
-function displayNoResultsMessage() {
-  if (!beatsGrid) return;
-
-  beatsGrid.innerHTML = `
-    <div class="store-message">
-      <i class="fas fa-search"></i>
-      <p>No beats found. Try adjusting your search or filters.</p>
-    </div>
-  `;
-}
-
-/* ==========================================
-   CART STORAGE AND OPERATIONS
-   ========================================== */
-
-function saveCart() {
-  try {
-    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.cart));
-  } catch (error) {
-    console.error("Unable to save cart:", error);
-  }
-}
-
-function getCartTotal() {
-  return getCartProducts().reduce(
-    (total, product) => total + product.price,
-    0
-  );
-}
-
-function addProductToCart(product) {
-  if (!product || !product.id || product.price <= 0) {
-    alert("This product is currently unavailable.");
-    return;
-  }
-
-  const key = cartKey(product);
-
-  if (!state.cart.includes(key)) {
-    state.cart.push(key);
-  }
-
-  saveCart();
-  renderCart();
-  renderBeats();
-
-  renderProductCategory(SAMPLE_CATALOG, "samples");
-  renderProductCategory(STUDIO_TOOLS_CATALOG, "studio-tools");
-
-  openCart();
-}
-
-function removeFromCart(key) {
-  state.cart = state.cart.filter(item => item !== key);
-
-  saveCart();
-  renderCart();
-  renderBeats();
-
-  renderProductCategory(SAMPLE_CATALOG, "samples");
-  renderProductCategory(STUDIO_TOOLS_CATALOG, "studio-tools");
-}
-
-function setVisible(element, visible, displayValue = "") {
-  if (!element) return;
-
-  element.hidden = !visible;
-  element.style.display = visible ? displayValue : "none";
-  element.setAttribute("aria-hidden", String(!visible));
-}
-
-/* ==========================================
-   CART RENDERING
-   ========================================== */
-
-function renderCart() {
-  const products = getCartProducts();
-  const count = products.length;
-  const total = products.reduce((sum, product) => sum + product.price, 0);
-
-  if (cartCount) {
-    cartCount.textContent = String(count);
-    cartCount.setAttribute(
-      "aria-label",
-      `${count} ${count === 1 ? "item" : "items"} in cart`
-    );
-    cartCount.classList.toggle("has-items", count > 0);
-  }
-
-  if (cartItemLabel) {
-    cartItemLabel.textContent = `${count} ${count === 1 ? "item" : "items"}`;
-  }
-
-  if (cartSummaryCount) {
-    cartSummaryCount.textContent = String(count);
-  }
-
-  if (cartTotal) {
-    cartTotal.textContent = formatNaira(total);
-  }
-
-  if (cartItemsContainer) {
-    cartItemsContainer.innerHTML = "";
-
-    products.forEach(product => {
-      const item = document.createElement("div");
-      item.className = "cart-item";
-
-      const categoryLabel = product.category === "beats"
-        ? `${product.genre} · ${product.bpm} BPM · ${product.key}`
-        : product.category === "samples"
-          ? "Sample Pack"
-          : "Studio Tool";
-
-      item.innerHTML = `
-        <img class="cart-item-image cart-item-artwork"
-          src="${escapeHtml(product.artwork)}"
-          alt="${escapeHtml(product.title)}">
-
-        <div class="cart-item-info cart-item-details">
-          <h3 class="cart-item-title">${escapeHtml(product.title)}</h3>
-          <p class="cart-item-meta">${escapeHtml(categoryLabel)}</p>
-          <span class="cart-item-format">
-            Includes ${escapeHtml(getFormatLabel(product))}
-          </span>
-          <strong class="cart-item-price">
-            ${formatNaira(product.price)}
-          </strong>
-        </div>
-
-        <button type="button" class="cart-remove-btn"
-          aria-label="Remove ${escapeHtml(product.title)} from cart">
-          <i class="fas fa-trash-alt"></i>
-        </button>
-      `;
-
-      const image = item.querySelector("img");
-
-      image.addEventListener("error", () => {
-        image.onerror = null;
-        image.src = "/images/placeholder.jpg";
-      });
-
-      item.querySelector(".cart-remove-btn").addEventListener("click", () => {
-        removeFromCart(cartKey(product));
-      });
-
-      cartItemsContainer.appendChild(item);
-    });
-  }
-
-  setVisible(cartEmpty, count === 0);
-  setVisible(cartSummary, count > 0);
-  setVisible(cartItemsContainer, count > 0);
-
-  if (checkoutBtn) {
-    checkoutBtn.disabled = count === 0 || state.checkoutInProgress;
-
-    if (!state.checkoutInProgress) {
-      checkoutBtn.innerHTML =
-        '<span>Proceed to Checkout</span> <i class="fas fa-lock"></i>';
-    }
-  }
-}
-
-/* ==========================================
-   OPEN / CLOSE CART
-   ========================================== */
-
-function openCart() {
-  if (!cartDrawer || !cartOverlay) return;
-
-  renderCart();
-
-  cartDrawer.classList.add("active");
-  cartOverlay.classList.add("active");
-
-  cartDrawer.setAttribute("aria-hidden", "false");
-  cartOverlay.setAttribute("aria-hidden", "false");
-
-  cartToggle?.setAttribute("aria-expanded", "true");
-  document.body.classList.add("cart-open");
-
-  closeCartButton?.focus({ preventScroll: true });
-}
-
-function closeCart() {
-  if (!cartDrawer || !cartOverlay) return;
-
-  cartDrawer.classList.remove("active");
-  cartOverlay.classList.remove("active");
-
-  cartDrawer.setAttribute("aria-hidden", "true");
-  cartOverlay.setAttribute("aria-hidden", "true");
-
-  cartToggle?.setAttribute("aria-expanded", "false");
-  document.body.classList.remove("cart-open");
-}
-
-function continueShopping() {
-  closeCart();
-
-  document.getElementById("beats")?.scrollIntoView({
-    behavior: "smooth",
-    block: "start"
-  });
-}
-
-/* ==========================================
-   PAYSTACK CHECKOUT
-   Existing beat fields retained.
-   Product items included for Worker integration.
-   ========================================== */
-
-async function checkoutCart() {
-  if (state.checkoutInProgress) return;
-
-  const products = getCartProducts();
-
-  if (!products.length) {
-    renderCart();
-    alert("Your cart is empty. Add a product before checking out.");
-    return;
-  }
-
-  const total = products.reduce(
-    (sum, product) => sum + product.price,
-    0
-  );
-
-  const emailInput = prompt(
-    `Your cart total is ${formatNaira(total)}.\n\n` +
-    "Your purchase includes the digital files listed for each item.\n\n" +
-    "Enter your email address for payment:"
-  );
-
-  if (emailInput === null) return;
-
-  const email = emailInput.trim();
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    alert("Please enter a valid email address.");
-    return;
-  }
-
-  const beatIds = products
-    .filter(product => product.category === "beats")
-    .map(product => product.id);
-
-  const productItems = products
-    .filter(product => product.category !== "beats")
-    .map(product => ({
-      id: product.id,
-      category: product.category
-    }));
-
-  state.checkoutInProgress = true;
-
-  if (checkoutBtn) {
-    checkoutBtn.disabled = true;
-    checkoutBtn.innerHTML =
-      '<i class="fas fa-spinner fa-spin"></i> Preparing Checkout...';
-  }
-
-  try {
-    /*
-     * Keep the existing beatIds / beatId / amount fields.
-     * The Worker update must validate productItems against its
-     * database and calculate the actual total server-side.
-     */
-    const payload = {
-      email,
-      beatIds,
-      amount: total,
-      productItems
-    };
-
-    if (beatIds.length === 1 && productItems.length === 0) {
-      payload.beatId = beatIds[0];
-    }
-
-    const result = await fetchJSON(API.payment, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!result.status || !result.data?.authorization_url) {
-      throw new Error(
-        result.message || "Unable to start checkout. Please try again."
-      );
-    }
-
-    window.location.href = result.data.authorization_url;
-  } catch (error) {
-    console.error("Checkout error:", error);
-
-    alert(
-      error.message || "Unable to start checkout. Please try again."
-    );
-
-    state.checkoutInProgress = false;
-    renderCart();
-  }
-}
-
-/* ==========================================
-   AUDIO PLAYER
-   ========================================== */
-
-function getPlayerElement(...ids) {
-  for (const id of ids) {
-    const element = document.getElementById(id);
-
-    if (element) return element;
-  }
-
-  return null;
-}
-
-function getPlayerElements() {
-  return {
-    title: getPlayerElement("playerTitle", "playerBeatTitle"),
-    genre: getPlayerElement("playerGenre", "playerBeatGenre"),
-    artwork: getPlayerElement("playerImage", "playerBeatArt"),
-    bpm: getPlayerElement("playerBeatBPM"),
-    key: getPlayerElement("playerBeatKey"),
-    progress: getPlayerElement("progress")
-  };
-}
-
-async function openPlayer(beat) {
-  if (!beat || !audioPlayer || !playerModal) return;
-
-  if (!beat.previewAudio) {
-    alert("Preview audio is not available for this beat yet.");
-    return;
-  }
-
-  state.currentBeat = beat;
-
-  const elements = getPlayerElements();
-
-  if (elements.title) elements.title.textContent = beat.title;
-  if (elements.genre) elements.genre.textContent = beat.genre;
-  if (elements.bpm) elements.bpm.textContent = `${beat.bpm} BPM`;
-  if (elements.key) elements.key.textContent = beat.key;
-
-  if (elements.artwork) {
-    elements.artwork.src = beat.artwork;
-    elements.artwork.alt = beat.title;
-
-    elements.artwork.onerror = () => {
-      elements.artwork.onerror = null;
-      elements.artwork.src = "/images/placeholder.jpg";
-    };
-  }
-
-  audioPlayer.pause();
-  audioPlayer.currentTime = 0;
-  audioPlayer.src = beat.previewAudio;
-  audioPlayer.load();
-
-  if (progressInput) {
-    progressInput.value = 0;
-    progressInput.max = 100;
-    progressInput.setAttribute("aria-label", "Track progress");
-  }
-
-  if (currentTimeEl) currentTimeEl.textContent = "0:00";
-  if (durationEl) durationEl.textContent = "0:00";
-  if (elements.progress) elements.progress.style.width = "0%";
-
-  playerModal.classList.add("active");
-  playerModal.setAttribute("aria-hidden", "false");
-
-  updatePlayButton();
-
-  try {
-    await audioPlayer.play();
-  } catch (error) {
-    console.error("Audio playback failed:", error);
-    updatePlayButton();
-  }
-}
-
-function closePlayerModal() {
-  if (!playerModal || !audioPlayer) return;
-
-  playerModal.classList.remove("active");
-  playerModal.setAttribute("aria-hidden", "true");
-
-  audioPlayer.pause();
-  updatePlayButton();
-}
-
-async function togglePlay() {
-  if (!audioPlayer) return;
-
-  if (!audioPlayer.src) {
-    if (state.currentBeat) {
-      if (state.currentBeat.category === "samples") {
-        await openProductPreview(state.currentBeat);
-      } else {
-        await openPlayer(state.currentBeat);
-      }
-    }
-
-    return;
-  }
-
-  if (audioPlayer.paused) {
+  async function checkoutCart() {
+    const products = getCartProducts();
+    if (!products.length) { alert("Your cart is empty. Add a product before checkout."); return; }
+    const email = window.prompt("Enter the email address where your secure download links should be sent:");
+    if (email === null) return;
+    const cleanedEmail = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanedEmail)) { alert("Enter a valid email address and try again."); return; }
+
+    const beatIds = products.filter(item => item.category === "beats").map(item => item.id);
+    const productItems = products.filter(item => item.category !== "beats").map(item => ({ id: item.id, category: item.category }));
+    const payload = { email: cleanedEmail, beatIds, productItems };
+    if (beatIds.length === 1 && products.length === 1) payload.beatId = beatIds[0];
+    const checkoutButton = document.getElementById("checkoutBtn");
+    const originalText = checkoutButton ? checkoutButton.innerHTML : "";
+    if (checkoutButton) { checkoutButton.disabled = true; checkoutButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting to Paystack…'; }
     try {
-      await audioPlayer.play();
+      const response = await fetch(API.payment, {
+        method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload)
+      });
+      let result;
+      try { result = await response.json(); } catch { throw new Error("The payment service returned an unreadable response."); }
+      if (!response.ok || !result.status || !result.data?.authorization_url) throw new Error(result.error || result.message || "Unable to start checkout. Please try again.");
+      window.location.href = result.data.authorization_url;
     } catch (error) {
-      console.error("Unable to play audio:", error);
+      console.error("Checkout error:", error);
+      alert(error.message || "Checkout failed. Please try again.");
+      if (checkoutButton) { checkoutButton.disabled = false; checkoutButton.innerHTML = originalText; }
     }
-  } else {
-    audioPlayer.pause();
   }
 
-  updatePlayButton();
-}
-
-function updatePlayButton() {
-  if (!playBtn || !audioPlayer) return;
-
-  const playing = !audioPlayer.paused;
-
-  playBtn.innerHTML = playing
-    ? '<i class="fas fa-pause"></i>'
-    : '<i class="fas fa-play"></i>';
-
-  playBtn.setAttribute(
-    "aria-label",
-    playing ? "Pause preview" : "Play preview"
-  );
-
-  playBtn.setAttribute("aria-pressed", String(playing));
-}
-
-function seek() {
-  if (
-    !audioPlayer ||
-    !progressInput ||
-    !Number.isFinite(audioPlayer.duration) ||
-    audioPlayer.duration <= 0
-  ) return;
-
-  const percent = Math.max(
-    0,
-    Math.min(100, Number(progressInput.value) || 0)
-  );
-
-  audioPlayer.currentTime = (percent / 100) * audioPlayer.duration;
-
-  updateProgress();
-}
-
-function updateProgress() {
-  if (!audioPlayer) return;
-
-  const duration = audioPlayer.duration;
-  const current = audioPlayer.currentTime || 0;
-
-  const percent =
-    Number.isFinite(duration) && duration > 0
-      ? Math.min(100, (current / duration) * 100)
-      : 0;
-
-  const elements = getPlayerElements();
-
-  if (elements.progress) {
-    elements.progress.style.width = `${percent}%`;
-  }
-
-  if (progressInput) {
-    progressInput.value = percent;
-  }
-
-  if (currentTimeEl) {
-    currentTimeEl.textContent = formatTime(current);
-  }
-}
-
-function updateDuration() {
-  if (!audioPlayer) return;
-
-  if (durationEl) {
-    durationEl.textContent = formatTime(audioPlayer.duration);
-  }
-
-  if (progressInput) {
-    progressInput.min = 0;
-    progressInput.max = 100;
-    progressInput.step = 0.1;
-  }
-
-  updateProgress();
-}
-
-function formatTime(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-
-  return `${minutes}:${String(secs).padStart(2, "0")}`;
-}
-
-function handleAudioEnd() {
-  if (!audioPlayer) return;
-
-  audioPlayer.currentTime = 0;
-  updateProgress();
-  updatePlayButton();
-}
-
-/* ==========================================
-   MOBILE MENU
-   ========================================== */
-
-function toggleMobileMenu() {
-  if (!navMenu || !navbarToggle) return;
-
-  const active = navMenu.classList.toggle("active");
-
-  navbarToggle.classList.toggle("active", active);
-  navbarToggle.setAttribute("aria-expanded", String(active));
-}
-
-/* ==========================================
-   EVENT LISTENERS
-   ========================================== */
-
-function setupEventListeners() {
-  beatSearchInput?.addEventListener("input", event => {
-    handleSearch(event.target.value);
-  });
-
-  genreFilter?.addEventListener("change", event => {
-    state.selectedGenre = event.target.value;
-    applyFilters();
+  function renderAll() {
     renderBeats();
-  });
+    renderProductCategory("samples");
+    renderProductCategory("studio-tools");
+    renderCart();
+  }
 
-  closePlayer?.addEventListener("click", closePlayerModal);
-  playBtn?.addEventListener("click", togglePlay);
+  function bindEvents() {
+    document.addEventListener("click", event => {
+      const actionButton = event.target.closest("[data-action]");
+      if (actionButton) {
+        const product = findProduct(actionButton.dataset.id, actionButton.dataset.category);
+        if (!product) return;
+        const action = actionButton.dataset.action;
+        if (action === "preview") openPreview(product);
+        if (action === "add") addToCart(product, true);
+        if (action === "buy") {
+          addToCart(product, false);
+          checkoutCart();
+        }
+      }
+      const removeButton = event.target.closest("[data-remove]");
+      if (removeButton) removeFromCart(removeButton.dataset.remove);
+    });
 
-  progressInput?.addEventListener("input", seek);
-  progressInput?.addEventListener("change", seek);
+    const searchInput = document.getElementById("searchInput");
+    if (searchInput) searchInput.addEventListener("input", event => { state.search = event.target.value || ""; renderBeats(); });
+    const genreFilter = document.getElementById("genreFilter");
+    if (genreFilter) genreFilter.addEventListener("change", event => { state.activeFilter = event.target.value || "all"; renderBeats(); });
+    const cartToggle = document.getElementById("cartToggle");
+    if (cartToggle) cartToggle.addEventListener("click", openCart);
+    ["closeCart", "cartContinueShopping", "continueShopping"].forEach(id => {
+      const element = document.getElementById(id);
+      if (element) element.addEventListener("click", closeCart);
+    });
+    const overlay = document.getElementById("cartOverlay");
+    if (overlay) overlay.addEventListener("click", closeCart);
+    const checkout = document.getElementById("checkoutBtn");
+    if (checkout) checkout.addEventListener("click", checkoutCart);
 
-  if (audioPlayer) {
-    audioPlayer.addEventListener("timeupdate", updateProgress);
-    audioPlayer.addEventListener("loadedmetadata", updateDuration);
-    audioPlayer.addEventListener("durationchange", updateDuration);
-    audioPlayer.addEventListener("ended", handleAudioEnd);
-    audioPlayer.addEventListener("play", updatePlayButton);
-    audioPlayer.addEventListener("pause", updatePlayButton);
+    const closePlayer = document.getElementById("closePlayer");
+    if (closePlayer) closePlayer.addEventListener("click", closePreview);
+    const playerModal = document.getElementById("playerModal");
+    if (playerModal) playerModal.addEventListener("click", event => { if (event.target === playerModal) closePreview(); });
+    const audio = document.getElementById("audioPlayer");
+    const playPause = document.getElementById("playPauseBtn");
+    if (playPause && audio) playPause.addEventListener("click", () => {
+      if (audio.paused) audio.play().then(updatePlayButton).catch(() => alert("Could not play this preview."));
+      else audio.pause();
+      updatePlayButton();
+    });
+    if (audio) {
+      audio.addEventListener("play", updatePlayButton);
+      audio.addEventListener("pause", updatePlayButton);
+      audio.addEventListener("timeupdate", () => {
+        const current = document.getElementById("currentTime");
+        const progress = document.getElementById("progressBar");
+        if (current) current.textContent = formatTime(audio.currentTime);
+        if (progress && Number.isFinite(audio.duration) && audio.duration > 0) progress.value = String((audio.currentTime / audio.duration) * 100);
+      });
+      audio.addEventListener("loadedmetadata", () => {
+        const duration = document.getElementById("duration");
+        if (duration) duration.textContent = formatTime(audio.duration);
+      });
+      audio.addEventListener("ended", updatePlayButton);
+    }
+    const progress = document.getElementById("progressBar");
+    if (progress && audio) progress.addEventListener("input", () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = (Number(progress.value) / 100) * audio.duration;
+    });
 
-    audioPlayer.addEventListener("error", () => {
-      console.error(
-        "Preview audio failed:",
-        audioPlayer.currentSrc,
-        audioPlayer.error
-      );
+    const navbarToggle = document.getElementById("navbarToggle");
+    const navMenu = document.getElementById("navMenu");
+    if (navbarToggle && navMenu) navbarToggle.addEventListener("click", () => {
+      navMenu.classList.toggle("active");
+      navbarToggle.setAttribute("aria-expanded", navMenu.classList.contains("active") ? "true" : "false");
+    });
+    const year = document.getElementById("currentYear");
+    if (year) year.textContent = String(new Date().getFullYear());
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") { closeCart(); closePreview(); }
     });
   }
 
-  navbarToggle?.addEventListener("click", toggleMobileMenu);
-
-  navbarToggle?.addEventListener("keydown", event => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      toggleMobileMenu();
-    }
+  document.addEventListener("DOMContentLoaded", async () => {
+    loadCart();
+    bindEvents();
+    await loadCatalogues();
   });
-
-  document.querySelectorAll(".nav-link").forEach(link => {
-    link.addEventListener("click", () => {
-      navMenu?.classList.remove("active");
-      navbarToggle?.classList.remove("active");
-      navbarToggle?.setAttribute("aria-expanded", "false");
-    });
-  });
-
-  playerModal?.addEventListener("click", event => {
-    if (event.target === playerModal) {
-      closePlayerModal();
-    }
-  });
-
-  cartToggle?.addEventListener("click", () => {
-    if (cartDrawer?.classList.contains("active")) {
-      closeCart();
-    } else {
-      openCart();
-    }
-  });
-
-  closeCartButton?.addEventListener("click", closeCart);
-  cartOverlay?.addEventListener("click", closeCart);
-
-  continueShoppingButton?.addEventListener("click", continueShopping);
-  cartContinueShoppingButton?.addEventListener("click", continueShopping);
-
-  checkoutBtn?.addEventListener("click", checkoutCart);
-
-  document.addEventListener("keydown", event => {
-    if (event.key !== "Escape") return;
-
-    if (cartDrawer?.classList.contains("active")) closeCart();
-    if (playerModal?.classList.contains("active")) closePlayerModal();
-  });
-
-  window.addEventListener("storage", event => {
-    if (event.key === CART_STORAGE_KEY) {
-      state.cart = loadSavedCart();
-      renderCart();
-      renderBeats();
-      renderProductCategory(SAMPLE_CATALOG, "samples");
-      renderProductCategory(STUDIO_TOOLS_CATALOG, "studio-tools");
-    }
-  });
-}
-
-/* ==========================================
-   INITIALIZATION
-   ========================================== */
-
-async function init() {
-  prepareCategorySections();
-
-  await Promise.all([
-    loadLiveCatalogue(),
-
-    loadCategory("samples").then(products => {
-      SAMPLE_CATALOG = products;
-    }),
-
-    loadCategory("studio-tools").then(products => {
-      STUDIO_TOOLS_CATALOG = products;
-    })
-  ]);
-
-  state.allBeats = [...BEATS_CATALOG];
-  state.filteredBeats = [...state.allBeats];
-
-  /*
-   * Keep valid saved cart entries for all published product categories.
-   * This also migrates old saved beat-only carts without removing them.
-   */
-  const validKeys = new Set([
-    ...state.allBeats.map(cartKey),
-    ...SAMPLE_CATALOG.map(cartKey),
-    ...STUDIO_TOOLS_CATALOG.map(cartKey)
-  ]);
-
-  state.cart = loadSavedCart().filter(key => validKeys.has(key));
-
-  buildAvailableGenres();
-
-  if (genreFilter) {
-    renderGenreSelect();
-  } else {
-    renderFilterButtons();
-  }
-
-  applyFilters();
-  renderBeats();
-
-  renderProductCategory(SAMPLE_CATALOG, "samples");
-  renderProductCategory(STUDIO_TOOLS_CATALOG, "studio-tools");
-
-  setupEventListeners();
-
-  saveCart();
-  renderCart();
-
-  const yearElement = document.getElementById("currentYear");
-
-  if (yearElement) {
-    yearElement.textContent = new Date().getFullYear();
-  }
-
-  console.log("Storefront ready:", {
-    beats: state.allBeats.length,
-    samples: SAMPLE_CATALOG.length,
-    studioTools: STUDIO_TOOLS_CATALOG.length
-  });
-}
-
-/* ==========================================
-   START APPLICATION
-   ========================================== */
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
-} else {
-  init();
-}
+})();
