@@ -7,58 +7,9 @@ const API = {
   beats: "/api/beats",
   products: "/api/products"
 };
-// ==========================================
-// FALLBACK BEAT CATALOG
-// ==========================================
-let BEATS_CATALOG = [
-  {
-    id: "sun-fire",
-    title: "SUN FIRE",
-    genre: "Afrobeat",
-    bpm: 105,
-    key: "A Minor",
-    price: 7000,
-    artwork: "/images/sun-fire.jpg",
-    previewAudio: "/audio/sun-fire-preview.mp3",
-    description: "Afrobeat instrumental",
-    formats: ["MP3", "WAV"],
-    available: true,
-    featured: true
-  },
-  {
-    id: "phenomenal",
-    title: "PHENOMENAL",
-    genre: "Afrobeat",
-    bpm: 124,
-    key: "A Minor",
-    price: 7000,
-    artwork: "/images/phenomenal.JPEG",
-    previewAudio: "/audio/phenomenal-preview.mp3",
-    description: "Afrobeat instrumental",
-    formats: ["MP3", "WAV"],
-    available: true,
-    featured: true
-  },
-  {
-    id: "serenade",
-    title: "SERENADE",
-    genre: "Afrobeat",
-    bpm: 118,
-    key: "A Minor",
-    price: 7000,
-    artwork: "/images/serenade.JPEG",
-    previewAudio: "/audio/serenade-preview.mp3",
-    description: "Afrobeat instrumental",
-    formats: ["MP3", "WAV"],
-    available: true,
-    featured: true
-  }
-];
+let BEATS_CATALOG = [];
 let SAMPLE_CATALOG = [];
 let STUDIO_TOOLS_CATALOG = [];
-// ==========================================
-// APPLICATION STATE
-// ==========================================
 function loadSavedCart() {
   try {
     const saved = localStorage.getItem(CART_STORAGE_KEY);
@@ -89,8 +40,7 @@ const state = {
 const beatsGrid = document.getElementById("beatsGrid");
 const paginationContainer = document.getElementById("pagination");
 const genreFilter = document.getElementById("genreFilter");
-const filterButtonsContainer =
-  document.querySelector(".filter-buttons");
+const filterButtonsContainer = document.querySelector(".filter-buttons");
 const beatSearchInput =
   document.getElementById("searchInput") ||
   document.getElementById("beatSearch");
@@ -119,8 +69,7 @@ const cartItemLabel = document.getElementById("cartItemLabel");
 const cartSummaryCount = document.getElementById("cartSummaryCount");
 const cartTotal = document.getElementById("cartTotal");
 const checkoutBtn = document.getElementById("checkoutBtn");
-const continueShoppingButton =
-  document.getElementById("continueShopping");
+const continueShoppingButton = document.getElementById("continueShopping");
 const cartContinueShoppingButton =
   document.getElementById("cartContinueShopping");
 // ==========================================
@@ -130,9 +79,7 @@ async function fetchJSON(url) {
   const response = await fetch(url, {
     method: "GET",
     cache: "no-store",
-    headers: {
-      Accept: "application/json"
-    }
+    headers: { Accept: "application/json" }
   });
   if (!response.ok) {
     throw new Error(`${url} returned HTTP ${response.status}`);
@@ -144,6 +91,10 @@ function mediaURL(id, type) {
 }
 function normalizeProduct(product, category) {
   const id = String(product.id || "").trim();
+  const previewKey = String(product.preview_key || "").trim();
+  const suppliedPreview = String(
+    product.previewAudio || product.preview_audio || ""
+  ).trim();
   return {
     id,
     category,
@@ -155,9 +106,9 @@ function normalizeProduct(product, category) {
     artwork: product.artwork
       ? String(product.artwork)
       : mediaURL(id, "artwork"),
-    previewAudio: product.previewAudio || product.preview_audio
-      ? String(product.previewAudio || product.preview_audio)
-      : mediaURL(id, "preview"),
+    preview_key: previewKey,
+    previewAudio: suppliedPreview ||
+      (previewKey ? mediaURL(id, "preview") : ""),
     description: String(product.description || "").trim(),
     formats: Array.isArray(product.formats)
       ? product.formats
@@ -174,6 +125,15 @@ function normalizeProduct(product, category) {
     status: String(product.status || "published")
   };
 }
+function isPublishedProduct(product) {
+  return Boolean(
+    product.id &&
+    product.title &&
+    product.price > 0 &&
+    product.available &&
+    product.status.toLowerCase() === "published"
+  );
+}
 // ==========================================
 // LOAD BEATS
 // ==========================================
@@ -183,26 +143,13 @@ async function loadLiveCatalogue() {
     if (!data || !Array.isArray(data.beats)) {
       throw new Error("Invalid beats catalogue response.");
     }
-    const liveBeats = data.beats.map(beat =>
-      normalizeProduct(beat, "beats")
-    ).filter(beat =>
-      beat.id &&
-      beat.title &&
-      beat.price > 0 &&
-      beat.available &&
-      beat.status !== "draft"
-    );
-    if (liveBeats.length > 0) {
-      BEATS_CATALOG = liveBeats;
-    } else {
-      console.warn("No published beats returned by the API.");
-      BEATS_CATALOG = liveBeats;
-    }
+    BEATS_CATALOG = data.beats
+      .map(beat => normalizeProduct(beat, "beats"))
+      .filter(isPublishedProduct);
     console.log("Published beats loaded:", BEATS_CATALOG.length);
-    return true;
   } catch (error) {
     console.error("Could not load live beats:", error);
-    return false;
+    BEATS_CATALOG = [];
   }
 }
 // ==========================================
@@ -218,13 +165,7 @@ async function loadCategory(category) {
     }
     const products = data.products
       .map(product => normalizeProduct(product, category))
-      .filter(product =>
-        product.id &&
-        product.title &&
-        product.price > 0 &&
-        product.available &&
-        product.status !== "draft"
-      );
+      .filter(isPublishedProduct);
     console.log(`${category} loaded:`, products.length);
     return products;
   } catch (error) {
@@ -233,88 +174,60 @@ async function loadCategory(category) {
   }
 }
 // ==========================================
-// CREATE CATEGORY SECTIONS
+// CATEGORY SECTIONS
+// Uses existing HTML sections and grids.
 // ==========================================
-function ensureCategorySection(category, heading, description) {
-  const sectionId = category === "studio-tools"
-    ? "studio-tools"
-    : category;
-  let section = document.getElementById(sectionId);
-  if (section) {
-    return section;
-  }
-  section = document.createElement("section");
-  section.id = sectionId;
-  section.className = "store-category-section";
-  section.style.cssText =
-    "padding:64px 0;scroll-margin-top:100px;";
-  const container = document.createElement("div");
-  container.className = "container";
-  const header = document.createElement("div");
-  header.className = "section-header";
-  const title = document.createElement("h2");
-  title.className = "section-title";
-  title.textContent = heading;
-  const subtitle = document.createElement("p");
-  subtitle.className = "section-description";
-  subtitle.textContent = description;
-  const grid = document.createElement("div");
-  grid.id = category === "samples"
-    ? "samplesGrid"
-    : "studioToolsGrid";
-  grid.className = "beats-grid";
-  const message = document.createElement("p");
-  message.className = "store-category-message";
-  message.style.cssText =
-    "padding:20px 0;color:var(--text-secondary,#aaa);";
-  header.append(title, subtitle);
-  container.append(header, grid, message);
-  section.appendChild(container);
-  // Put the new section after the existing beats section.
-  const beatsSection =
-    document.getElementById("beats") ||
-    beatsGrid?.closest("section");
-  if (beatsSection && beatsSection.parentNode) {
-    let insertionPoint = beatsSection;
-    if (category === "samples") {
-      insertionPoint.insertAdjacentElement("afterend", section);
-    } else {
-      const samplesSection = document.getElementById("samples");
-      if (samplesSection) {
-        samplesSection.insertAdjacentElement("afterend", section);
+function prepareCategorySections() {
+  const categories = [
+    {
+      id: "samples",
+      gridId: "samplesGrid",
+      heading: "Sample Packs",
+      description:
+        "Original drums, loops, melodies and textures for your next production."
+    },
+    {
+      id: "studio-tools",
+      gridId: "studioToolsGrid",
+      heading: "Studio Tools",
+      description:
+        "Production resources and tools built for your sound."
+    }
+  ];
+  categories.forEach(category => {
+    const section = document.getElementById(category.id);
+    if (!section) {
+      console.error(`Missing HTML section: #${category.id}`);
+      return;
+    }
+    // Remove the old Coming Soon placeholder.
+    section.querySelector(".category-coming-soon")?.remove();
+    let grid = document.getElementById(category.gridId);
+    if (!grid) {
+      grid = document.createElement("div");
+      grid.id = category.gridId;
+      grid.className = "beats-grid";
+      const header = section.querySelector(".section-header");
+      if (header) {
+        header.insertAdjacentElement("afterend", grid);
       } else {
-        insertionPoint.insertAdjacentElement("afterend", section);
+        section.appendChild(grid);
       }
     }
-  } else {
-    document.body.appendChild(section);
-  }
-  return section;
-}
-function prepareCategorySections() {
-  ensureCategorySection(
-    "samples",
-    "Samples",
-    "Explore sounds, loops and sample packs for your next production."
-  );
-  ensureCategorySection(
-    "studio-tools",
-    "Studio Tools",
-    "Production resources and tools built for your sound."
-  );
-  // Keep existing navigation links working.
-  document.querySelectorAll(".nav-link").forEach(link => {
-    const text = (link.textContent || "").trim().toLowerCase();
-    const href = (link.getAttribute("href") || "").toLowerCase();
-    if (text.includes("sample") || href.includes("sample")) {
-      link.setAttribute("href", "#samples");
-    } else if (
-      text.includes("studio tools") ||
-      href.includes("studio-tools")
-    ) {
-      link.setAttribute("href", "#studio-tools");
-    } else if (text.includes("beat") || href === "#beats") {
-      link.setAttribute("href", "#beats");
+    let message = document.getElementById(
+      category.id === "samples"
+        ? "samplesMessage"
+        : "studioToolsMessage"
+    );
+    if (!message) {
+      message = document.createElement("p");
+      message.id = category.id === "samples"
+        ? "samplesMessage"
+        : "studioToolsMessage";
+      message.className = "store-category-message";
+      message.style.cssText =
+        "padding:20px 0;color:var(--text-secondary,#aaa);";
+      grid.insertAdjacentElement("afterend", message);
     }
   });
 }
@@ -322,18 +235,21 @@ function prepareCategorySections() {
 // RENDER SAMPLES AND STUDIO TOOLS
 // ==========================================
 function renderProductCategory(products, category) {
-  const gridId = category === "samples"
-    ? "samplesGrid"
-    : "studioToolsGrid";
+  const isSamples = category === "samples";
+  const gridId = isSamples ? "samplesGrid" : "studioToolsGrid";
+  const messageId = isSamples ? "samplesMessage" : "studioToolsMessage";
   const grid = document.getElementById(gridId);
-  const section = document.getElementById(category);
-  const message = section?.querySelector(".store-category-message");
-  if (!grid) return;
+  const message = document.getElementById(messageId);
+  if (!grid) {
+    console.error(`Missing product grid: #${gridId}`);
+    return;
+  }
   grid.innerHTML = "";
   if (!products.length) {
     if (message) {
-      message.textContent =
-        `No published ${category === "samples" ? "samples" : "studio tools"} are available yet.`;
+      message.textContent = isSamples
+        ? "No published sample packs are available yet."
+        : "No published studio tools are available yet.";
     }
     return;
   }
@@ -360,55 +276,73 @@ function renderProductCategory(products, category) {
     const description = document.createElement("p");
     description.className = "product-description";
     description.textContent = product.description ||
-      (category === "samples"
-        ? "Sample pack"
-        : "Studio production tool");
+      (isSamples ? "Sample pack" : "Studio production tool");
+    const format = document.createElement("p");
+    format.className = "product-format";
+    format.textContent = `Format: ${product.formats.join(" + ")}`;
     const price = document.createElement("div");
     price.className = "beat-price";
     price.textContent = formatNaira(product.price);
-    info.append(title, description, price);
-    // Samples can use the same preview media route as beats.
-    if (category === "samples" && product.previewAudio) {
-      const previewButton = document.createElement("button");
-      previewButton.type = "button";
-      previewButton.className = "buy-btn product-preview-btn";
-      previewButton.innerHTML =
-        '<i class="fas fa-play"></i> Preview';
-      previewButton.addEventListener("click", () => {
-        openProductPreview(product);
-      });
-      info.appendChild(previewButton);
+    info.append(title, description, format, price);
+    if (isSamples) {
+      if (product.previewAudio) {
+        const previewButton = document.createElement("button");
+        previewButton.type = "button";
+        previewButton.className = "buy-btn product-preview-btn";
+        previewButton.innerHTML =
+          '<i class="fas fa-play"></i> Preview Audio';
+        previewButton.addEventListener("click", () => {
+          openProductPreview(product);
+        });
+        info.appendChild(previewButton);
+      } else {
+        const previewNote = document.createElement("p");
+        previewNote.className = "product-purchase-note";
+        previewNote.style.cssText =
+          "font-size:12px;opacity:.7;margin-top:10px;";
+        previewNote.textContent = "Audio preview coming soon";
+        info.appendChild(previewNote);
+      }
     }
-    // Product checkout is intentionally not wired to the beat cart.
-    // The existing Worker checkout currently receives beatIds.
-    const note = document.createElement("p");
-    note.className = "product-purchase-note";
-    note.style.cssText =
+    const purchaseNote = document.createElement("p");
+    purchaseNote.className = "product-purchase-note";
+    purchaseNote.style.cssText =
       "font-size:12px;opacity:.7;margin-top:10px;";
-    note.textContent = category === "samples"
-      ? "Sample pack"
-      : "Studio resource";
-    info.appendChild(note);
+    purchaseNote.textContent = isSamples
+      ? "Digital sample pack"
+      : "Digital studio resource";
+    info.appendChild(purchaseNote);
     card.append(image, info);
     grid.appendChild(card);
   });
 }
+// ==========================================
+// SAMPLE PREVIEW
+// ==========================================
 async function openProductPreview(product) {
+  if (!product.previewAudio) {
+    alert("Preview audio has not been uploaded for this sample yet.");
+    return;
+  }
   if (!audioPlayer || !playerModal) {
-    alert("The audio preview player is not available on this page.");
+    alert("The audio player is not available on this page.");
     return;
   }
   state.currentBeat = product;
-  const title = document.getElementById("playerTitle") ||
-    document.getElementById("playerBeatTitle");
-  const genre = document.getElementById("playerGenre") ||
-    document.getElementById("playerBeatGenre");
-  if (title) title.textContent = product.title;
-  if (genre) genre.textContent = "Sample Preview";
+  const elements = getPlayerElements();
+  if (elements.title) elements.title.textContent = product.title;
+  if (elements.genre) elements.genre.textContent = "Sample Preview";
+  if (elements.artwork) {
+    elements.artwork.src = product.artwork;
+    elements.artwork.alt = product.title;
+  }
   audioPlayer.pause();
   audioPlayer.currentTime = 0;
   audioPlayer.src = product.previewAudio;
   audioPlayer.load();
+  if (progressInput) progressInput.value = 0;
+  if (currentTimeEl) currentTimeEl.textContent = "0:00";
+  if (durationEl) durationEl.textContent = "0:00";
   playerModal.classList.add("active");
   playerModal.setAttribute("aria-hidden", "false");
   updatePlayButton();
@@ -422,55 +356,42 @@ async function openProductPreview(product) {
 // INITIALIZATION
 // ==========================================
 async function init() {
-  try {
-    prepareCategorySections();
-    // Load all catalogue types independently.
-    await Promise.all([
-      loadLiveCatalogue().then(() => {
-        state.allBeats = BEATS_CATALOG.filter(beat => beat.available);
-      }),
-      loadCategory("samples").then(products => {
-        SAMPLE_CATALOG = products;
-      }),
-      loadCategory("studio-tools").then(products => {
-        STUDIO_TOOLS_CATALOG = products;
-      })
-    ]);
-    state.filteredBeats = [...state.allBeats];
-    state.cart = loadSavedCart();
-    // Remove cart IDs that are not published beats.
-    const validIds = new Set(state.allBeats.map(beat => beat.id));
-    state.cart = state.cart.filter(id => validIds.has(id));
-    buildAvailableGenres();
-    if (genreFilter) {
-      renderGenreSelect();
-    } else {
-      renderFilterButtons();
-    }
-    applyFilters();
-    renderBeats();
-    renderProductCategory(SAMPLE_CATALOG, "samples");
-    renderProductCategory(STUDIO_TOOLS_CATALOG, "studio-tools");
-    setupEventListeners();
-    saveCart();
-    renderCart();
-    const yearElement = document.getElementById("currentYear");
-    if (yearElement) {
-      yearElement.textContent = new Date().getFullYear();
-    }
-    console.log("Storefront ready:", {
-      beats: state.allBeats.length,
-      samples: SAMPLE_CATALOG.length,
-      studioTools: STUDIO_TOOLS_CATALOG.length
-    });
-  } catch (error) {
-    console.error("Application initialization failed:", error);
-    if (beatsGrid) {
-      displayErrorMessage(
-        "Unable to load the catalogue. Please refresh the page."
-      );
-    }
+  prepareCategorySections();
+  await Promise.all([
+    loadLiveCatalogue(),
+    loadCategory("samples").then(products => {
+      SAMPLE_CATALOG = products;
+    }),
+    loadCategory("studio-tools").then(products => {
+      STUDIO_TOOLS_CATALOG = products;
+    })
+  ]);
+  state.allBeats = [...BEATS_CATALOG];
+  state.filteredBeats = [...state.allBeats];
+  const validIds = new Set(state.allBeats.map(beat => beat.id));
+  state.cart = loadSavedCart().filter(id => validIds.has(id));
+  buildAvailableGenres();
+  if (genreFilter) {
+    renderGenreSelect();
+  } else {
+    renderFilterButtons();
   }
+  applyFilters();
+  renderBeats();
+  renderProductCategory(SAMPLE_CATALOG, "samples");
+  renderProductCategory(STUDIO_TOOLS_CATALOG, "studio-tools");
+  setupEventListeners();
+  saveCart();
+  renderCart();
+  const yearElement = document.getElementById("currentYear");
+  if (yearElement) {
+    yearElement.textContent = new Date().getFullYear();
+  }
+  console.log("Storefront ready:", {
+    beats: state.allBeats.length,
+    samples: SAMPLE_CATALOG.length,
+    studioTools: STUDIO_TOOLS_CATALOG.length
+  });
 }
 // ==========================================
 // GENRE MANAGEMENT
@@ -862,15 +783,14 @@ function closeCart() {
 }
 function continueShopping() {
   closeCart();
-  const section = document.getElementById("beats");
-  section?.scrollIntoView({
+  document.getElementById("beats")?.scrollIntoView({
     behavior: "smooth",
     block: "start"
   });
 }
 // ==========================================
 // PAYSTACK CHECKOUT
-// Existing beat checkout is preserved.
+// Existing beat checkout preserved.
 // ==========================================
 async function checkoutCart() {
   if (state.checkoutInProgress) return;
@@ -955,6 +875,10 @@ function getPlayerElements() {
 }
 async function openPlayer(beat) {
   if (!beat || !audioPlayer || !playerModal) return;
+  if (!beat.previewAudio) {
+    alert("Preview audio is not available for this item yet.");
+    return;
+  }
   state.currentBeat = beat;
   const elements = getPlayerElements();
   if (elements.title) elements.title.textContent = beat.title;
@@ -1001,7 +925,13 @@ function closePlayerModal() {
 async function togglePlay() {
   if (!audioPlayer) return;
   if (!audioPlayer.src) {
-    if (state.currentBeat) await openPlayer(state.currentBeat);
+    if (state.currentBeat) {
+      if (state.currentBeat.category === "samples") {
+        await openProductPreview(state.currentBeat);
+      } else {
+        await openPlayer(state.currentBeat);
+      }
+    }
     return;
   }
   if (audioPlayer.paused) {
@@ -1021,7 +951,10 @@ function updatePlayButton() {
   playBtn.innerHTML = playing
     ? '<i class="fas fa-pause"></i>'
     : '<i class="fas fa-play"></i>';
-  playBtn.setAttribute("aria-label", playing ? "Pause preview" : "Play preview");
+  playBtn.setAttribute(
+    "aria-label",
+    playing ? "Pause preview" : "Play preview"
+  );
   playBtn.setAttribute("aria-pressed", String(playing));
 }
 function seek() {
@@ -1031,7 +964,10 @@ function seek() {
     !Number.isFinite(audioPlayer.duration) ||
     audioPlayer.duration <= 0
   ) return;
-  const percent = Math.max(0, Math.min(100, Number(progressInput.value) || 0));
+  const percent = Math.max(
+    0,
+    Math.min(100, Number(progressInput.value) || 0)
+  );
   audioPlayer.currentTime = (percent / 100) * audioPlayer.duration;
   updateProgress();
 }
@@ -1044,13 +980,17 @@ function updateProgress() {
       ? Math.min(100, (current / duration) * 100)
       : 0;
   const elements = getPlayerElements();
-  if (elements.progress) elements.progress.style.width = `${percent}%`;
+  if (elements.progress) {
+    elements.progress.style.width = `${percent}%`;
+  }
   if (progressInput) progressInput.value = percent;
   if (currentTimeEl) currentTimeEl.textContent = formatTime(current);
 }
 function updateDuration() {
   if (!audioPlayer) return;
-  if (durationEl) durationEl.textContent = formatTime(audioPlayer.duration);
+  if (durationEl) {
+    durationEl.textContent = formatTime(audioPlayer.duration);
+  }
   if (progressInput) {
     progressInput.min = 0;
     progressInput.max = 100;
