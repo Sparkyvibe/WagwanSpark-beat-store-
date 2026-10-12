@@ -1,8 +1,11 @@
 
 /*
- * WAGWANSPARK — MULTI-CATEGORY STOREFRONT
- * Original-style beat cards, artwork previews, sample packs,
- * studio tools, cart and Paystack checkout.
+ * WAGWANSPARK — MULTI-PAGE STOREFRONT
+ * index.html       = Beats landing page
+ * samples.html     = Sample Packs
+ * studio-tools.html = Studio Tools
+ *
+ * Shared catalogues, previews, cart and Paystack checkout.
  */
 (() => {
   "use strict";
@@ -17,6 +20,26 @@
   const CATEGORIES = ["beats", "samples", "studio-tools"];
   const CHECKOUT_LABEL =
     '<span>Proceed to Checkout</span> <i class="fas fa-lock" aria-hidden="true"></i>';
+
+  function detectCurrentPage() {
+    const filename = window.location.pathname
+      .split("/")
+      .pop()
+      .toLowerCase();
+
+    if (filename === "samples.html") return "samples";
+
+    if (
+      filename === "studio-tools.html" ||
+      filename === "studio.html"
+    ) {
+      return "studio-tools";
+    }
+
+    return "beats";
+  }
+
+  const CURRENT_PAGE = detectCurrentPage();
 
   const state = {
     products: {
@@ -69,6 +92,7 @@
 
     item.id = safeText(item.id);
     item.title = safeText(item.title || item.name || item.id);
+
     item.category = CATEGORIES.includes(item.category)
       ? item.category
       : category;
@@ -351,6 +375,56 @@
     document.head.appendChild(style);
   }
 
+  function configureNavigation() {
+    $$(".navbar-logo").forEach(link => {
+      link.href = "index.html";
+    });
+
+    $$("a.nav-link, .footer-navigation a").forEach(link => {
+      const label = link.textContent.trim().toLowerCase();
+
+      if (label === "home" || label === "beats") {
+        link.href = label === "home" ? "index.html" : "index.html#beats";
+      } else if (label === "samples") {
+        link.href = "samples.html";
+      } else if (
+        label === "studio tools" ||
+        label === "studio-tools"
+      ) {
+        link.href = "studio-tools.html";
+      } else if (label === "about") {
+        link.href = "index.html#about";
+      } else if (label === "contact") {
+        link.href = "index.html#contact";
+      }
+    });
+
+    const exploreButtons = $$("a[href='#beats']");
+
+    exploreButtons.forEach(link => {
+      if (CURRENT_PAGE !== "beats") {
+        link.href = "index.html#beats";
+      }
+    });
+
+    const navMenu = document.getElementById("navMenu");
+
+    if (navMenu) {
+      navMenu.addEventListener("click", event => {
+        const target = event.target instanceof Element
+          ? event.target.closest("a")
+          : null;
+
+        if (target) {
+          navMenu.classList.remove("active");
+
+          const toggle = document.getElementById("navbarToggle");
+          if (toggle) toggle.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+  }
+
   async function loadCatalogues() {
     const results = await Promise.allSettled([
       getJson(API.beats),
@@ -366,10 +440,13 @@
       ).map(item => normalizeProduct(item, "beats"));
     } else {
       console.error("Beat catalogue could not load:", results[0].reason);
-      showMessage(
-        "beatsGrid",
-        "Beats could not load. Please refresh the page and try again."
-      );
+
+      if (CURRENT_PAGE === "beats") {
+        showMessage(
+          "beatsGrid",
+          "Beats could not load. Please refresh the page and try again."
+        );
+      }
     }
 
     ["samples", "studio-tools"].forEach((category, index) => {
@@ -385,10 +462,12 @@
         console.error(`${category} catalogue could not load:`, result.reason);
         state.products[category] = [];
 
-        showMessage(
-          category === "samples" ? "samplesGrid" : "studioToolsGrid",
-          `${categoryLabel(category)} catalogue could not load. Please refresh the page.`
-        );
+        if (CURRENT_PAGE === category) {
+          showMessage(
+            category === "samples" ? "samplesGrid" : "studioToolsGrid",
+            `${categoryLabel(category)} catalogue could not load. Please refresh the page.`
+          );
+        }
       }
     });
 
@@ -416,8 +495,6 @@
     const key = cartKey(product);
     const inCart = state.cart.includes(key);
 
-    // Beats and Samples both use the same artwork preview control.
-    // Studio Tools remain non-previewable.
     const playable =
       (category === "beats" || category === "samples") &&
       Boolean(product.previewAudio);
@@ -542,57 +619,11 @@
     `;
   }
 
-  function ensureCategorySection(category) {
-    const gridId = category === "samples"
-      ? "samplesGrid"
-      : "studioToolsGrid";
-
-    let grid = document.getElementById(gridId);
-    if (grid) return grid;
-
-    const sectionId = category === "samples" ? "samples" : "studio-tools";
-    let section = document.getElementById(sectionId);
-
-    if (!section) {
-      section = document.createElement("section");
-      section.className = "beats-section product-category-section";
-      section.id = sectionId;
-
-      const footer = $(".footer");
-      document.body.insertBefore(section, footer || null);
-    }
-
-    const comingSoon = $(".category-coming-soon", section);
-    if (comingSoon) comingSoon.remove();
-
-    if (!$(".section-header", section)) {
-      const title = category === "samples" ? "Sample Packs" : "Studio Tools";
-
-      section.insertAdjacentHTML(
-        "afterbegin",
-        `
-          <div class="section-header">
-            <p class="section-subtitle">WAGWANSPARK SOUND LAB</p>
-            <h2>${title}</h2>
-            <p>Explore the catalogue and add products to your cart.</p>
-          </div>
-        `
-      );
-    }
-
-    grid = document.createElement("div");
-    grid.className = "beats-grid product-grid";
-    grid.id = gridId;
-    section.appendChild(grid);
-
-    return grid;
-  }
-
   function renderBeats() {
     const grid = document.getElementById("beatsGrid");
 
     if (!grid) {
-      console.error("The beats grid #beatsGrid is missing from the page.");
+      console.error("The beats grid #beatsGrid is missing from this page.");
       return;
     }
 
@@ -620,7 +651,7 @@
           <p>
             ${state.products.beats.length
               ? "No beats match your search."
-              : "No beats are currently published. If you have published beats in Admin, check the /api/beats response."}
+              : "No beats are currently published. Check the /api/beats response."}
           </p>
         </div>
       `;
@@ -656,7 +687,17 @@
   }
 
   function renderProductCategory(category) {
-    const grid = ensureCategorySection(category);
+    const gridId = category === "samples"
+      ? "samplesGrid"
+      : "studioToolsGrid";
+
+    const grid = document.getElementById(gridId);
+
+    if (!grid) {
+      console.error(`The product grid #${gridId} is missing from this page.`);
+      return;
+    }
+
     const items = state.products[category] || [];
 
     grid.innerHTML = items.length
@@ -737,10 +778,7 @@
   function ensureCheckoutButton() {
     const summary = document.getElementById("cartSummary");
 
-    if (!summary) {
-      console.error("Cart summary #cartSummary was not found.");
-      return null;
-    }
+    if (!summary) return null;
 
     let button = document.getElementById("checkoutBtn");
 
@@ -1143,9 +1181,19 @@
   }
 
   function renderAll() {
-    renderBeats();
-    renderProductCategory("samples");
-    renderProductCategory("studio-tools");
+    /*
+     * Render only the active page's product category.
+     * All three catalogues are still loaded so the shared cart
+     * can resolve items added on another page.
+     */
+    if (CURRENT_PAGE === "beats") {
+      renderBeats();
+    } else if (CURRENT_PAGE === "samples") {
+      renderProductCategory("samples");
+    } else if (CURRENT_PAGE === "studio-tools") {
+      renderProductCategory("studio-tools");
+    }
+
     renderCart();
   }
 
@@ -1181,7 +1229,6 @@
         return;
       }
 
-      // Artwork taps toggle playback for Beats and Samples.
       const card = target.closest(
         ".product-card[data-previewable='true']"
       );
@@ -1322,6 +1369,13 @@
           navMenu.classList.contains("active") ? "true" : "false"
         );
       });
+
+      navbarToggle.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          navbarToggle.click();
+        }
+      });
     }
 
     const year = document.getElementById("currentYear");
@@ -1337,10 +1391,12 @@
 
   document.addEventListener("DOMContentLoaded", async () => {
     installStoreInteractionStyles();
+    configureNavigation();
     loadCart();
     bindEvents();
 
     const summary = document.getElementById("cartSummary");
+
     if (summary) {
       summary.hidden = true;
       summary.style.display = "none";
