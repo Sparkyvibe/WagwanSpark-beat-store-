@@ -1,7 +1,9 @@
 
  // ==========================================
  // WAGWANSPARK — BEAT STORE WORKER
+ // Beats • Samples • Studio Tools
  // ==========================================
+
 const LEGACY_BEATS = {
   "sun-fire": {
     title: "SUN FIRE",
@@ -20,6 +22,8 @@ const LEGACY_BEATS = {
   }
 };
 
+const CATEGORIES = ["beats", "samples", "studio-tools"];
+
 const CALLBACK_URL =
   "https://wagwanspark-beat-store.taiyeowoyemi.workers.dev/success.html";
 
@@ -27,6 +31,10 @@ const DOWNLOAD_TOKEN_LIFETIME = 30 * 60 * 1000;
 const EMAIL_DOWNLOAD_TOKEN_LIFETIME = 7 * 24 * 60 * 60 * 1000;
 const ADMIN_SESSION_LIFETIME = 8 * 60 * 60 * 1000;
 const SESSION_COOKIE = "ws_admin_session";
+
+// ==========================================
+// GENERAL HELPERS
+// ==========================================
 
 function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
@@ -84,9 +92,7 @@ async function verifySignature(payload, signature, secret) {
   if (
     typeof signature !== "string" ||
     signature.length !== expected.length
-  ) {
-    return false;
-  }
+  ) return false;
 
   let difference = 0;
   for (let i = 0; i < signature.length; i++) {
@@ -96,7 +102,6 @@ async function verifySignature(payload, signature, secret) {
   return difference === 0;
 }
 
-// Paystack webhook signatures use HMAC-SHA512, not SHA-256.
 async function verifyPaystackWebhookSignature(rawBody, signature, secret) {
   try {
     if (!signature || !secret) return false;
@@ -137,7 +142,6 @@ async function createSignedToken(data, secret) {
   const payload = base64url(
     new TextEncoder().encode(JSON.stringify(data))
   );
-
   return `${payload}.${await createSignature(payload, secret)}`;
 }
 
@@ -149,17 +153,13 @@ async function verifySignedToken(token, secret) {
     if (parts.length !== 2) return null;
 
     const [payload, signature] = parts;
-
-    if (!(await verifySignature(payload, signature, secret))) {
-      return null;
-    }
+    if (!(await verifySignature(payload, signature, secret))) return null;
 
     const data = JSON.parse(
       new TextDecoder().decode(base64urlDecode(payload))
     );
 
     if (!data.exp || Date.now() > data.exp) return null;
-
     return data;
   } catch {
     return null;
@@ -177,9 +177,7 @@ async function verifyDownloadToken(token, secret) {
     !data ||
     typeof data.beatId !== "string" ||
     typeof data.reference !== "string"
-  ) {
-    return null;
-  }
+  ) return null;
 
   return data;
 }
@@ -215,9 +213,7 @@ async function getAdminSession(request, env) {
     !session ||
     session.role !== "admin" ||
     typeof session.csrf !== "string"
-  ) {
-    return null;
-  }
+  ) return null;
 
   return session;
 }
@@ -226,18 +222,13 @@ async function requireAdmin(request, env, requireCsrf = false) {
   const session = await getAdminSession(request, env);
 
   if (!session) {
-    return {
-      response: json({ error: "Authentication required." }, 401)
-    };
+    return { response: json({ error: "Authentication required." }, 401) };
   }
 
   if (requireCsrf) {
     const supplied = request.headers.get("X-CSRF-Token") || "";
-
     if (!supplied || supplied !== session.csrf) {
-      return {
-        response: json({ error: "Invalid security token." }, 403)
-      };
+      return { response: json({ error: "Invalid security token." }, 403) };
     }
   }
 
@@ -256,23 +247,47 @@ function cleanText(value, maxLength = 200) {
     : "";
 }
 
+function validCategory(value) {
+  return CATEGORIES.includes(value) ? value : null;
+}
+
+function categoryOf(product) {
+  return validCategory(product.category) || "beats";
+}
+
+function productLabel(category) {
+  return category === "samples"
+    ? "sample pack"
+    : category === "studio-tools"
+      ? "studio tool"
+      : "beat";
+}
+
+// ==========================================
+// DATABASE HELPERS
+// ==========================================
+
 async function getBeat(env, id) {
   return env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description,
             artwork_key, preview_key, zip_key, status, featured,
-            created_at, updated_at
+            category, created_at, updated_at
      FROM beats WHERE id = ?`
   ).bind(id).first();
 }
 
-async function getPublishedBeats(env) {
+async function getPublishedBeats(env, category = "beats") {
+  const safeCategory = validCategory(category) || "beats";
+
   const result = await env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description,
-            artwork_key, preview_key, status, featured
+            artwork_key, preview_key, status, featured, category,
+            created_at, updated_at
      FROM beats
      WHERE status = 'published'
+       AND COALESCE(category, 'beats') = ?
      ORDER BY featured DESC, created_at DESC`
-  ).all();
+  ).bind(safeCategory).all();
 
   return result.results || [];
 }
@@ -302,10 +317,10 @@ function beatFileNameVariants(beat) {
 
 function mediaKeyCandidates(beat, column) {
   const candidates = [];
-
   if (beat[column]) candidates.push(beat[column]);
 
   const names = beatFileNameVariants(beat);
+  const category = categoryOf(beat);
 
   if (column === "artwork_key") {
     for (const name of names) {
@@ -326,8 +341,20 @@ function mediaKeyCandidates(beat, column) {
   }
 
   if (column === "zip_key") {
+    const folder = category === "samples"
+      ? "samples"
+      : category === "studio-tools"
+        ? "studio-tools"
+        : "beats";
+
     for (const name of names) {
-      candidates.push(`beats/${name}.zip`);
+      candidates.push(`${folder}/${name}.zip`);
+
+      // Keep the old beat paths usable for existing products.
+      if (category === "beats") {
+        candidates.push(`beats/${name}.zip`);
+      }
+
       candidates.push(`${name}.zip`);
     }
 
@@ -339,17 +366,12 @@ function mediaKeyCandidates(beat, column) {
 }
 
 async function findExistingR2Object(env, beat, column) {
-  if (!env.BEATS_BUCKET) {
-    return { key: null, object: null };
-  }
+  if (!env.BEATS_BUCKET) return { key: null, object: null };
 
   for (const key of mediaKeyCandidates(beat, column)) {
     try {
       const object = await env.BEATS_BUCKET.head(key);
-
-      if (object) {
-        return { key, object };
-      }
+      if (object) return { key, object };
     } catch (error) {
       console.error("R2 object lookup failed:", key, error);
     }
@@ -360,10 +382,7 @@ async function findExistingR2Object(env, beat, column) {
 
 async function repairStoredFileKey(env, beat, column) {
   const found = await findExistingR2Object(env, beat, column);
-
-  if (!found.key) {
-    return { found: false, key: null };
-  }
+  if (!found.key) return { found: false, key: null };
 
   if (beat[column] !== found.key) {
     await env.DB.prepare(
@@ -378,52 +397,77 @@ async function repairStoredFileKey(env, beat, column) {
   return { found: true, key: found.key };
 }
 
+async function getZipObject(env, beat) {
+  if (!env.BEATS_BUCKET) return null;
+
+  const found = await findExistingR2Object(env, beat, "zip_key");
+  if (!found.key) return null;
+
+  if (beat.zip_key !== found.key) {
+    await env.DB.prepare(
+      `UPDATE beats
+       SET zip_key = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).bind(found.key, beat.id).run();
+
+    beat.zip_key = found.key;
+  }
+
+  return env.BEATS_BUCKET.get(found.key);
+}
+
+function safeFilename(value) {
+  return String(value || "download")
+    .replace(/[^a-zA-Z0-9 _-]/g, "")
+    .trim()
+    .slice(0, 100) || "download";
+}
+
 // ==========================================
 // CHECKOUT HELPERS
 // ==========================================
 
 async function getRequestedBeats(data, env) {
-  let beatIds;
+  let productIds;
 
   if (Array.isArray(data.beatIds)) {
-    beatIds = data.beatIds;
+    productIds = data.beatIds;
   } else if (typeof data.beatId === "string") {
-    beatIds = [data.beatId];
+    productIds = [data.beatId];
   } else {
-    return { error: "Please select at least one beat." };
+    return { error: "Please select at least one product." };
   }
 
   if (
-    beatIds.length === 0 ||
-    beatIds.length > 50 ||
-    beatIds.some(id => typeof id !== "string")
+    productIds.length === 0 ||
+    productIds.length > 50 ||
+    productIds.some(id => typeof id !== "string")
   ) {
-    return { error: "Invalid number of selected beats." };
+    return { error: "Invalid number of selected products." };
   }
 
-  if (new Set(beatIds).size !== beatIds.length) {
-    return { error: "Duplicate beats are not allowed." };
+  if (new Set(productIds).size !== productIds.length) {
+    return { error: "Duplicate products are not allowed." };
   }
 
   const beats = [];
 
-  for (const id of beatIds) {
+  for (const id of productIds) {
     const beat = await getBeat(env, id);
 
     if (!beat || beat.status !== "published") {
-      return {
-        error: "One or more selected beats are unavailable."
-      };
+      return { error: "One or more selected products are unavailable." };
     }
 
     if (!Number.isSafeInteger(beat.price) || beat.price < 1) {
-      return { error: "Invalid beat price." };
+      return { error: "Invalid product price." };
     }
 
     beats.push({
       id: beat.id,
       title: beat.title,
-      price: beat.price
+      price: beat.price,
+      category: categoryOf(beat)
     });
   }
 
@@ -445,48 +489,15 @@ function getPurchasedBeatIds(metadata) {
     } catch {}
   }
 
-  if (typeof metadata.beatId === "string") {
-    return [metadata.beatId];
-  }
+  if (typeof metadata.beatId === "string") return [metadata.beatId];
 
   return null;
 }
 
-async function getZipObject(env, beat) {
-  if (!env.BEATS_BUCKET) return null;
-
-  const found = await findExistingR2Object(env, beat, "zip_key");
-
-  if (found.key) {
-    if (beat.zip_key !== found.key) {
-      await env.DB.prepare(
-        `UPDATE beats
-         SET zip_key = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`
-      ).bind(found.key, beat.id).run();
-
-      beat.zip_key = found.key;
-    }
-
-    return await env.BEATS_BUCKET.get(found.key);
-  }
-
-  return null;
-}
-
-function safeFilename(value) {
-  return String(value || "download")
-    .replace(/[^a-zA-Z0-9 _-]/g, "")
-    .trim()
-    .slice(0, 100) || "download";
-}
-
 // ==========================================
-// EMAIL DELIVERY HELPERS
+// EMAIL DELIVERY
 // ==========================================
 
-// Verify the reference directly against Paystack.
-// Do not trust the webhook payload alone.
 async function verifyPaystackTransaction(reference, env) {
   const response = await fetch(
     `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
@@ -537,7 +548,7 @@ async function getVerifiedPurchase(transaction, env) {
     beatIds.some(id => typeof id !== "string") ||
     new Set(beatIds).size !== beatIds.length
   ) {
-    throw new Error("Purchased beats could not be identified.");
+    throw new Error("Purchased products could not be identified.");
   }
 
   const beats = [];
@@ -546,13 +557,14 @@ async function getVerifiedPurchase(transaction, env) {
     const beat = await getBeat(env, id);
 
     if (!beat || !Number.isSafeInteger(beat.price) || beat.price < 1) {
-      throw new Error("Purchased beat could not be verified.");
+      throw new Error("Purchased product could not be verified.");
     }
 
     beats.push({
       id: beat.id,
       title: beat.title,
-      price: beat.price
+      price: beat.price,
+      category: categoryOf(beat)
     });
   }
 
@@ -565,7 +577,7 @@ async function getVerifiedPurchase(transaction, env) {
     !Number.isSafeInteger(expectedKobo) ||
     Number(transaction.amount) !== expectedKobo
   ) {
-    throw new Error("Payment amount does not match the purchased beats.");
+    throw new Error("Payment amount does not match the purchase.");
   }
 
   const email = cleanText(transaction.customer?.email, 254);
@@ -583,9 +595,7 @@ async function sendPurchaseEmail(env, email, reference, beats, origin) {
   }
 
   if (
-    !env.EMAIL_SCRIPT_URL.startsWith(
-      "https://script.google.com/macros/s/"
-    ) ||
+    !env.EMAIL_SCRIPT_URL.startsWith("https://script.google.com/macros/s/") ||
     !env.EMAIL_SCRIPT_URL.endsWith("/exec")
   ) {
     throw new Error("EMAIL_SCRIPT_URL is not a valid Apps Script URL.");
@@ -603,19 +613,17 @@ async function sendPurchaseEmail(env, email, reference, beats, origin) {
     const downloadUrl =
       `${origin}/api/download?token=${encodeURIComponent(token)}`;
 
-    downloadLines.push(
-      `${beat.title}\nDownload: ${downloadUrl}`
-    );
+    downloadLines.push(`${beat.title}\nDownload: ${downloadUrl}`);
   }
 
   const subject = beats.length === 1
     ? `WagwanSpark — ${beats[0].title} Download`
-    : `WagwanSpark — Your Beat Downloads`;
+    : "WagwanSpark — Your Downloads";
 
   const body = [
     "Thank you for purchasing from WagwanSpark.",
     "",
-    "Your payment has been verified. Your beat download link(s) are below:",
+    "Your payment has been verified. Your download link(s) are below:",
     "",
     ...downloadLines,
     "",
@@ -631,9 +639,7 @@ async function sendPurchaseEmail(env, email, reference, beats, origin) {
 
   const response = await fetch(env.EMAIL_SCRIPT_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       secret: env.EMAIL_SHARED_SECRET,
       to: email,
@@ -651,16 +657,13 @@ async function sendPurchaseEmail(env, email, reference, beats, origin) {
   }
 
   let result;
-
   try {
     result = JSON.parse(responseText);
   } catch {
-    console.error("Email endpoint returned an unexpected response.");
     throw new Error("Google email endpoint response was not valid JSON.");
   }
 
   if (!result.success) {
-    console.error("Email endpoint rejected the request.");
     throw new Error("Google email endpoint did not confirm delivery.");
   }
 
@@ -672,15 +675,10 @@ async function sendPurchaseEmail(env, email, reference, beats, origin) {
 // ==========================================
 
 async function handlePaystackWebhook(request, env, url) {
-  if (
-    !env.PAYSTACK_SECRET_KEY ||
-    !env.DB ||
-    !env.BEATS_BUCKET
-  ) {
+  if (!env.PAYSTACK_SECRET_KEY || !env.DB || !env.BEATS_BUCKET) {
     return json({ error: "Payment service is not configured." }, 500);
   }
 
-  // Read the original request body before parsing it.
   const rawBody = await request.text();
   const signature = request.headers.get("x-paystack-signature") || "";
 
@@ -695,14 +693,12 @@ async function handlePaystackWebhook(request, env, url) {
   }
 
   let event;
-
   try {
     event = JSON.parse(rawBody);
   } catch {
     return json({ error: "Invalid webhook payload." }, 400);
   }
 
-  // Other event types do not trigger beat-download emails.
   if (event.event !== "charge.success") {
     return json({ received: true, ignored: true });
   }
@@ -718,14 +714,8 @@ async function handlePaystackWebhook(request, env, url) {
   }
 
   try {
-    // Verify the transaction independently with Paystack.
-    const transaction = await verifyPaystackTransaction(
-      reference,
-      env
-    );
+    const transaction = await verifyPaystackTransaction(reference, env);
 
-    // The signed event and verified transaction must refer to the
-    // same payment and must agree on the amount and currency.
     if (
       event.data?.reference !== transaction.reference ||
       Number(event.data?.amount) !== Number(transaction.amount) ||
@@ -736,12 +726,8 @@ async function handlePaystackWebhook(request, env, url) {
       }, 400);
     }
 
-    const { beats, email } = await getVerifiedPurchase(
-      transaction,
-      env
-    );
+    const { beats, email } = await getVerifiedPurchase(transaction, env);
 
-    // Create the idempotency table if it does not exist yet.
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS email_deliveries (
         reference TEXT PRIMARY KEY,
@@ -753,8 +739,6 @@ async function handlePaystackWebhook(request, env, url) {
       )`
     ).run();
 
-    // A unique reference prevents ordinary webhook retries from
-    // sending another email for a payment already recorded as sent.
     const inserted = await env.DB.prepare(
       `INSERT OR IGNORE INTO email_deliveries
        (reference, recipient, status)
@@ -766,21 +750,13 @@ async function handlePaystackWebhook(request, env, url) {
     if (!wasInserted) {
       const existing = await env.DB.prepare(
         `SELECT reference, recipient, status, updated_at
-         FROM email_deliveries
-         WHERE reference = ?`
+         FROM email_deliveries WHERE reference = ?`
       ).bind(reference).first();
 
       if (existing?.status === "sent") {
-        return json({
-          received: true,
-          emailSent: true,
-          duplicate: true
-        });
+        return json({ received: true, emailSent: true, duplicate: true });
       }
 
-      // Recover failed deliveries and stale processing records.
-      // A currently processing delivery is left alone to avoid
-      // simultaneous duplicate emails.
       const updatedAt = existing?.updated_at
         ? Date.parse(`${existing.updated_at.replace(" ", "T")}Z`)
         : NaN;
@@ -789,22 +765,12 @@ async function handlePaystackWebhook(request, env, url) {
         !Number.isFinite(updatedAt) ||
         Date.now() - updatedAt > 5 * 60 * 1000;
 
-      if (
-        !existing ||
-        existing.recipient !== email
-      ) {
-        console.error("Email delivery record does not match payment.");
+      if (!existing || existing.recipient !== email) {
         return json({ error: "Email delivery record mismatch." }, 500);
       }
 
-      if (
-        existing.status === "processing" &&
-        !stale
-      ) {
-        return json({
-          received: true,
-          processing: true
-        });
+      if (existing.status === "processing" && !stale) {
+        return json({ received: true, processing: true });
       }
 
       const reclaimed = await env.DB.prepare(
@@ -820,11 +786,7 @@ async function handlePaystackWebhook(request, env, url) {
         ).bind(reference).first();
 
         if (latest?.status === "sent") {
-          return json({
-            received: true,
-            emailSent: true,
-            duplicate: true
-          });
+          return json({ received: true, emailSent: true, duplicate: true });
         }
 
         return json({ error: "Could not claim email delivery." }, 500);
@@ -832,47 +794,32 @@ async function handlePaystackWebhook(request, env, url) {
     }
 
     try {
-      await sendPurchaseEmail(
-        env,
-        email,
-        reference,
-        beats,
-        url.origin
-      );
+      await sendPurchaseEmail(env, email, reference, beats, url.origin);
 
       await env.DB.prepare(
         `UPDATE email_deliveries
-         SET status = 'sent',
-             sent_at = CURRENT_TIMESTAMP,
+         SET status = 'sent', sent_at = CURRENT_TIMESTAMP,
              updated_at = CURRENT_TIMESTAMP
          WHERE reference = ?`
       ).bind(reference).run();
 
-      return json({
-        received: true,
-        emailSent: true
-      });
+      return json({ received: true, emailSent: true });
     } catch (emailError) {
       console.error("Purchase email delivery failed:", emailError);
 
       await env.DB.prepare(
         `UPDATE email_deliveries
-         SET status = 'failed',
-             updated_at = CURRENT_TIMESTAMP
+         SET status = 'failed', updated_at = CURRENT_TIMESTAMP
          WHERE reference = ?`
       ).bind(reference).run();
 
-      // Return a server error so Paystack can retry the webhook.
       return json({
         error: "Email delivery failed. Webhook retry is required."
       }, 500);
     }
   } catch (error) {
     console.error("Paystack webhook processing failed:", error);
-
-    return json({
-      error: "Webhook processing failed."
-    }, 500);
+    return json({ error: "Webhook processing failed." }, 500);
   }
 }
 
@@ -891,10 +838,8 @@ async function handleAdmin(request, env, url) {
 
   const path = url.pathname;
 
-  // Login
   if (path === "/api/admin/login" && request.method === "POST") {
     let data;
-
     try {
       data = await request.json();
     } catch {
@@ -910,7 +855,6 @@ async function handleAdmin(request, env, url) {
     }
 
     const csrf = base64url(crypto.getRandomValues(new Uint8Array(32)));
-
     const token = await createSignedToken({
       role: "admin",
       csrf,
@@ -924,7 +868,6 @@ async function handleAdmin(request, env, url) {
     );
   }
 
-  // Logout
   if (path === "/api/admin/logout" && request.method === "POST") {
     const auth = await requireAdmin(request, env, true);
     if (auth.response) return auth.response;
@@ -936,16 +879,11 @@ async function handleAdmin(request, env, url) {
     );
   }
 
-  // Check session and return CSRF token
   if (path === "/api/admin/session" && request.method === "GET") {
     const session = await getAdminSession(request, env);
-
     if (!session) return json({ authenticated: false }, 401);
 
-    return json({
-      authenticated: true,
-      csrfToken: session.csrf
-    });
+    return json({ authenticated: true, csrfToken: session.csrf });
   }
 
   const isReadOnly =
@@ -954,7 +892,6 @@ async function handleAdmin(request, env, url) {
   const auth = await requireAdmin(request, env, !isReadOnly);
   if (auth.response) return auth.response;
 
-  // List all beats
   if (path === "/api/admin/beats" && request.method === "GET") {
     const result = await env.DB.prepare(
       `SELECT * FROM beats ORDER BY created_at DESC`
@@ -963,10 +900,9 @@ async function handleAdmin(request, env, url) {
     return json({ beats: result.results || [] });
   }
 
-  // Create a beat draft
+  // Create a product draft in any category.
   if (path === "/api/admin/beats" && request.method === "POST") {
     let data;
-
     try {
       data = await request.json();
     } catch {
@@ -977,17 +913,30 @@ async function handleAdmin(request, env, url) {
     const title = cleanText(data.title, 120);
     const genre = cleanText(data.genre, 80);
     const musicalKey = cleanText(data.musical_key, 40);
+    const category = validCategory(data.category || "beats");
+
     const bpm = data.bpm === "" || data.bpm == null
-      ? null : Number(data.bpm);
+      ? null
+      : Number(data.bpm);
+
     const price = Number(data.price);
 
     if (!validId(id) || !title || !genre) {
-      return json({ error: "Provide a valid ID, title, and genre." }, 400);
+      return json({
+        error: "Provide a valid ID, title, and genre."
+      }, 400);
+    }
+
+    if (!category) {
+      return json({
+        error: "Category must be beats, samples, or studio-tools."
+      }, 400);
     }
 
     if (
       !Number.isSafeInteger(price) || price < 1 ||
-      (bpm !== null && (!Number.isInteger(bpm) || bpm < 1 || bpm > 400))
+      (bpm !== null &&
+        (!Number.isInteger(bpm) || bpm < 1 || bpm > 400))
     ) {
       return json({ error: "Check the price and BPM values." }, 400);
     }
@@ -996,28 +945,32 @@ async function handleAdmin(request, env, url) {
       await env.DB.prepare(
         `INSERT INTO beats
          (id, title, genre, bpm, musical_key, price, description,
-          status, featured, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 0,
+          category, status, featured, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', 0,
                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
       ).bind(
-        id, title, genre, bpm, musicalKey, price,
-        cleanText(data.description, 2000)
+        id,
+        title,
+        genre,
+        category === "beats" ? bpm : null,
+        category === "beats" ? musicalKey : "",
+        price,
+        cleanText(data.description, 2000),
+        category
       ).run();
     } catch (error) {
       if (String(error).includes("UNIQUE")) {
-        return json({ error: "That beat ID already exists." }, 409);
+        return json({ error: "That product ID already exists." }, 409);
       }
-
       throw error;
     }
 
     return json({ success: true, beat: await getBeat(env, id) }, 201);
   }
 
-  // Upload artwork, preview audio, or private ZIP
+  // Upload artwork, optional preview, or private ZIP package.
   if (path === "/api/admin/upload" && request.method === "POST") {
     let form;
-
     try {
       form = await request.formData();
     } catch {
@@ -1028,20 +981,14 @@ async function handleAdmin(request, env, url) {
     const kind = cleanText(form.get("kind"), 20).toLowerCase();
     const file = form.get("file");
 
-    if (
-      !validId(id) ||
-      !file ||
-      typeof file.arrayBuffer !== "function"
-    ) {
-      return json({ error: "Select a beat and a file." }, 400);
+    if (!validId(id) || !file || typeof file.arrayBuffer !== "function") {
+      return json({ error: "Select a product and a file." }, 400);
     }
 
     const beat = await getBeat(env, id);
+    if (!beat) return json({ error: "Product not found." }, 404);
 
-    if (!beat) {
-      return json({ error: "Beat not found." }, 404);
-    }
-
+    const category = categoryOf(beat);
     const mime = (file.type || "").toLowerCase();
 
     let key;
@@ -1051,36 +998,25 @@ async function handleAdmin(request, env, url) {
 
     if (kind === "artwork") {
       if (!["image/jpeg", "image/png", "image/webp"].includes(mime)) {
-        return json({
-          error: "Artwork must be JPG, PNG, or WebP."
-        }, 400);
+        return json({ error: "Artwork must be JPG, PNG, or WebP." }, 400);
       }
 
       maxBytes = 10 * 1024 * 1024;
-
-      if (file.size > maxBytes) {
-        return json({ error: "Artwork must be 10 MB or smaller." }, 413);
-      }
-
-      const ext = mime === "image/jpeg" ? "jpg"
-        : mime === "image/png" ? "png" : "webp";
+      const ext = mime === "image/jpeg"
+        ? "jpg"
+        : mime === "image/png"
+          ? "png"
+          : "webp";
 
       key = `artwork/${id}.${ext}`;
       column = "artwork_key";
       contentType = mime;
     } else if (kind === "preview") {
       if (!["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav"].includes(mime)) {
-        return json({
-          error: "Preview must be an MP3 or WAV audio file."
-        }, 400);
+        return json({ error: "Preview must be an MP3 or WAV audio file." }, 400);
       }
 
       maxBytes = 25 * 1024 * 1024;
-
-      if (file.size > maxBytes) {
-        return json({ error: "Preview must be 25 MB or smaller." }, 413);
-      }
-
       const ext = mime.includes("wav") ? "wav" : "mp3";
 
       key = `previews/${id}.${ext}`;
@@ -1088,22 +1024,22 @@ async function handleAdmin(request, env, url) {
       contentType = ext === "wav" ? "audio/wav" : "audio/mpeg";
     } else if (kind === "zip") {
       const fileName = typeof file.name === "string"
-        ? file.name.toLowerCase() : "";
+        ? file.name.toLowerCase()
+        : "";
 
-      if (
-        mime !== "application/zip" &&
-        !fileName.endsWith(".zip")
-      ) {
+      if (mime !== "application/zip" && !fileName.endsWith(".zip")) {
         return json({ error: "Upload a ZIP file." }, 400);
       }
 
       maxBytes = 100 * 1024 * 1024;
 
-      if (file.size > maxBytes) {
-        return json({ error: "ZIP must be 100 MB or smaller." }, 413);
-      }
+      const folder = category === "samples"
+        ? "samples"
+        : category === "studio-tools"
+          ? "studio-tools"
+          : "beats";
 
-      key = `beats/${id}.zip`;
+      key = `${folder}/${id}.zip`;
       column = "zip_key";
       contentType = "application/zip";
     } else {
@@ -1115,26 +1051,24 @@ async function handleAdmin(request, env, url) {
     }
 
     if (file.size > maxBytes) {
-      return json({ error: "File exceeds the size limit." }, 413);
+      return json({
+        error: `File exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB size limit.`
+      }, 413);
     }
 
-    // Store the object in R2.
     try {
       await env.BEATS_BUCKET.put(key, await file.arrayBuffer(), {
         httpMetadata: { contentType },
-        customMetadata: { beatId: id, kind }
+        customMetadata: { beatId: id, kind, category }
       });
     } catch (error) {
       console.error("R2 upload failed:", { id, kind, key, error });
-
       return json({
         error: "R2 could not save the uploaded file. Please try again."
       }, 500);
     }
 
-    // Confirm that R2 actually contains the object before saving its key.
     let storedObject;
-
     try {
       storedObject = await env.BEATS_BUCKET.head(key);
     } catch (error) {
@@ -1143,11 +1077,10 @@ async function handleAdmin(request, env, url) {
 
     if (!storedObject) {
       return json({
-        error: `Upload was sent to R2, but verification failed for ${key}. The file key was not saved. Please retry the upload.`
+        error: `Upload verification failed for ${key}. Please retry the upload.`
       }, 500);
     }
 
-    // Save the verified R2 key to the corresponding database column.
     try {
       await env.DB.prepare(
         `UPDATE beats
@@ -1155,51 +1088,31 @@ async function handleAdmin(request, env, url) {
          WHERE id = ?`
       ).bind(key, id).run();
     } catch (error) {
-      console.error("Database file-key update failed:", {
-        id, column, key, error
-      });
-
+      console.error("Database file-key update failed:", error);
       return json({
-        error: "The file is in R2, but its key could not be saved to the database. Retry the upload or contact support."
+        error: "The file is in R2, but its key could not be saved. Retry the upload."
       }, 500);
     }
 
     const updatedBeat = await getBeat(env, id);
 
     if (!updatedBeat || updatedBeat[column] !== key) {
-      console.error("Saved file key did not match expected key:", {
-        id,
-        column,
-        expected: key,
-        actual: updatedBeat ? updatedBeat[column] : null
-      });
-
       return json({
-        error: "The file was uploaded, but the database did not confirm its key. Please retry the upload."
+        error: "The database did not confirm the uploaded file key. Please retry."
       }, 500);
     }
 
-    return json({
-      success: true,
-      kind,
-      key,
-      beat: updatedBeat
-    });
+    return json({ success: true, kind, key, beat: updatedBeat });
   }
 
-  // Update or delete a beat
   const beatMatch = path.match(/^\/api\/admin\/beats\/([a-z0-9-]+)$/);
 
   if (beatMatch && request.method === "PATCH") {
     const id = beatMatch[1];
     const existing = await getBeat(env, id);
-
-    if (!existing) {
-      return json({ error: "Beat not found." }, 404);
-    }
+    if (!existing) return json({ error: "Product not found." }, 404);
 
     let data;
-
     try {
       data = await request.json();
     } catch {
@@ -1210,8 +1123,12 @@ async function handleAdmin(request, env, url) {
     const genre = cleanText(data.genre, 80);
     const description = cleanText(data.description, 2000);
     const musicalKey = cleanText(data.musical_key, 40);
+    const category = validCategory(data.category || categoryOf(existing));
+
     const bpm = data.bpm === "" || data.bpm == null
-      ? null : Number(data.bpm);
+      ? null
+      : Number(data.bpm);
+
     const price = Number(data.price);
     const featured = Number(data.featured) === 1 ? 1 : 0;
     const status = data.status === "published" ? "published" : "draft";
@@ -1220,31 +1137,51 @@ async function handleAdmin(request, env, url) {
       return json({ error: "Title and genre are required." }, 400);
     }
 
+    if (!category) {
+      return json({
+        error: "Category must be beats, samples, or studio-tools."
+      }, 400);
+    }
+
     if (
       !Number.isSafeInteger(price) || price < 1 ||
-      (bpm !== null && (!Number.isInteger(bpm) || bpm < 1 || bpm > 400))
+      (category === "beats" && bpm !== null &&
+        (!Number.isInteger(bpm) || bpm < 1 || bpm > 400))
     ) {
       return json({ error: "Check the price and BPM values." }, 400);
     }
 
-    // Validate the actual R2 objects, not only the database key strings.
+    // Publishing requirements vary by category.
+    // All products require artwork and a ZIP.
+    // Only beats require preview audio.
     if (status === "published") {
       const requiredFiles = [
         { column: "artwork_key", label: "artwork" },
-        { column: "preview_key", label: "preview audio" },
-        { column: "zip_key", label: "ZIP beat file" }
+        { column: "zip_key", label: "ZIP package" }
       ];
+
+      if (category === "beats") {
+        requiredFiles.push({
+          column: "preview_key",
+          label: "preview audio"
+        });
+      }
+
+      const productForValidation = {
+        ...existing,
+        category
+      };
 
       for (const item of requiredFiles) {
         const result = await repairStoredFileKey(
           env,
-          existing,
+          productForValidation,
           item.column
         );
 
         if (!result.found) {
           return json({
-            error: `The ${item.label} file is not present in R2 for ${existing.title}. Upload that file again before publishing.`,
+            error: `The ${item.label} file is not present in R2 for ${title}. Upload that file again before publishing.`,
             missing: item.column,
             beatId: id
           }, 400);
@@ -1255,27 +1192,29 @@ async function handleAdmin(request, env, url) {
     await env.DB.prepare(
       `UPDATE beats
        SET title = ?, genre = ?, bpm = ?, musical_key = ?, price = ?,
-           description = ?, status = ?, featured = ?,
+           description = ?, category = ?, status = ?, featured = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
     ).bind(
-      title, genre, bpm, musicalKey, price,
-      description, status, featured, id
+      title,
+      genre,
+      category === "beats" ? bpm : null,
+      category === "beats" ? musicalKey : "",
+      price,
+      description,
+      category,
+      status,
+      featured,
+      id
     ).run();
 
-    return json({
-      success: true,
-      beat: await getBeat(env, id)
-    });
+    return json({ success: true, beat: await getBeat(env, id) });
   }
 
   if (beatMatch && request.method === "DELETE") {
     const id = beatMatch[1];
     const beat = await getBeat(env, id);
-
-    if (!beat) {
-      return json({ error: "Beat not found." }, 404);
-    }
+    if (!beat) return json({ error: "Product not found." }, 404);
 
     for (const key of [
       beat.artwork_key,
@@ -1283,18 +1222,38 @@ async function handleAdmin(request, env, url) {
       beat.zip_key
     ]) {
       if (key) {
-        await env.BEATS_BUCKET.delete(key);
+        try {
+          await env.BEATS_BUCKET.delete(key);
+        } catch (error) {
+          console.error("R2 delete failed:", key, error);
+        }
       }
     }
 
-    await env.DB.prepare(
-      "DELETE FROM beats WHERE id = ?"
-    ).bind(id).run();
-
+    await env.DB.prepare("DELETE FROM beats WHERE id = ?").bind(id).run();
     return json({ success: true });
   }
 
   return json({ error: "Admin endpoint not found." }, 404);
+}
+
+// ==========================================
+// PUBLIC CATALOGUE FORMATTER
+// ==========================================
+
+function formatPublicProduct(product, origin) {
+  return {
+    ...product,
+    category: categoryOf(product),
+    artwork: product.artwork_key
+      ? `${origin}/api/media/${encodeURIComponent(product.id)}/artwork`
+      : "",
+    previewAudio: product.preview_key
+      ? `${origin}/api/media/${encodeURIComponent(product.id)}/preview`
+      : "",
+    formats: ["ZIP"],
+    available: true
+  };
 }
 
 // ==========================================
@@ -1319,69 +1278,75 @@ export default {
       });
     }
 
-    // Paystack webhook: register this exact URL in Paystack.
     if (path === "/api/paystack-webhook" && request.method === "POST") {
       try {
         return await handlePaystackWebhook(request, env, url);
       } catch (error) {
         console.error("Webhook handler error:", error);
-
-        return json({
-          error: "Webhook handler failed."
-        }, 500);
+        return json({ error: "Webhook handler failed." }, 500);
       }
     }
 
-    // Admin API
     if (path.startsWith("/api/admin/")) {
       try {
         return await handleAdmin(request, env, url);
       } catch (error) {
         console.error("Admin API error:", error);
-
-        return json({
-          error: "Admin request failed."
-        }, 500);
+        return json({ error: "Admin request failed." }, 500);
       }
     }
 
-    // Public catalogue
+    // Existing beats endpoint remains compatible with the current store.
     if (path === "/api/beats" && request.method === "GET") {
       try {
-        const beats = await getPublishedBeats(env);
-
+        const beats = await getPublishedBeats(env, "beats");
         return json({
           beats: beats.map(beat => ({
-            ...beat,
-            artwork: beat.artwork_key
-              ? `/api/media/${encodeURIComponent(beat.id)}/artwork`
-              : "",
-            previewAudio: beat.preview_key
-              ? `/api/media/${encodeURIComponent(beat.id)}/preview`
-              : "",
-            formats: ["MP3", "WAV"],
-            available: true
+            ...formatPublicProduct(beat, url.origin),
+            formats: ["MP3", "WAV"]
           }))
         });
       } catch (error) {
-        console.error("Public catalogue error:", error);
-
-        return json({
-          error: "Catalogue unavailable."
-        }, 500);
+        console.error("Public beats catalogue error:", error);
+        return json({ error: "Catalogue unavailable." }, 500);
       }
     }
 
-    // Public artwork and preview only; ZIPs are never served here.
+    // Separate category endpoint for Samples and Studio Tools pages.
+    if (path === "/api/products" && request.method === "GET") {
+      try {
+        const category = validCategory(url.searchParams.get("category"));
+
+        if (!category || category === "beats") {
+          return json({
+            error: "Choose category=samples or category=studio-tools."
+          }, 400);
+        }
+
+        const products = await getPublishedBeats(env, category);
+
+        return json({
+          category,
+          products: products.map(product =>
+            formatPublicProduct(product, url.origin)
+          )
+        });
+      } catch (error) {
+        console.error("Public products catalogue error:", error);
+        return json({ error: "Catalogue unavailable." }, 500);
+      }
+    }
+
+    // Public artwork and preview audio. ZIP files are never served here.
     const mediaMatch = path.match(
       /^\/api\/media\/([a-z0-9-]+)\/(artwork|preview)$/
     );
 
     if (mediaMatch && request.method === "GET") {
       try {
-        const beat = await getBeat(env, mediaMatch[1]);
+        const product = await getBeat(env, mediaMatch[1]);
 
-        if (!beat || beat.status !== "published") {
+        if (!product || product.status !== "published") {
           return new Response("Not found.", { status: 404 });
         }
 
@@ -1389,7 +1354,11 @@ export default {
           ? "artwork_key"
           : "preview_key";
 
-        let key = beat[column];
+        if (column === "preview_key" && categoryOf(product) !== "beats") {
+          return new Response("Not found.", { status: 404 });
+        }
+
+        let key = product[column];
 
         if (key) {
           const object = await env.BEATS_BUCKET.get(key);
@@ -1399,26 +1368,17 @@ export default {
             object.writeHttpMetadata(headers);
             headers.set("Cache-Control", "public, max-age=300");
             headers.set("X-Content-Type-Options", "nosniff");
-
             return new Response(object.body, { headers });
           }
         }
 
-        const recovered = await repairStoredFileKey(
-          env,
-          beat,
-          column
-        );
-
+        const recovered = await repairStoredFileKey(env, product, column);
         if (!recovered.found) {
           return new Response("Not found.", { status: 404 });
         }
 
         const object = await env.BEATS_BUCKET.get(recovered.key);
-
-        if (!object) {
-          return new Response("Not found.", { status: 404 });
-        }
+        if (!object) return new Response("Not found.", { status: 404 });
 
         const headers = new Headers();
         object.writeHttpMetadata(headers);
@@ -1432,7 +1392,10 @@ export default {
       }
     }
 
+    // ========================================
     // CREATE PAYMENT
+    // ========================================
+
     if (path === "/api/create-payment" && request.method === "POST") {
       try {
         if (!env.PAYSTACK_SECRET_KEY || !env.DB) {
@@ -1443,7 +1406,6 @@ export default {
         }
 
         let data;
-
         try {
           data = await request.json();
         } catch {
@@ -1469,12 +1431,8 @@ export default {
         }
 
         const selection = await getRequestedBeats(data, env);
-
         if (selection.error) {
-          return json({
-            status: false,
-            error: selection.error
-          }, 400);
+          return json({ status: false, error: selection.error }, 400);
         }
 
         const { beats, total } = selection;
@@ -1512,15 +1470,10 @@ export default {
         if (
           !response.ok ||
           !result.status ||
-          !result.data ||
-          !result.data.authorization_url ||
-          !result.data.reference
+          !result.data?.authorization_url ||
+          !result.data?.reference
         ) {
-          console.error(
-            "Paystack initialization failed:",
-            result.message
-          );
-
+          console.error("Paystack initialization failed:", result.message);
           return json({
             status: false,
             error: result.message || "Unable to initialize payment."
@@ -1530,7 +1483,6 @@ export default {
         return json(result);
       } catch (error) {
         console.error("Payment initialization error:", error);
-
         return json({
           status: false,
           error: "Payment initialization failed. Please try again."
@@ -1538,7 +1490,10 @@ export default {
       }
     }
 
-    // VERIFY PAYMENT — existing success-page flow retained.
+    // ========================================
+    // VERIFY PAYMENT
+    // ========================================
+
     if (path === "/api/verify-payment" && request.method === "GET") {
       try {
         if (!env.PAYSTACK_SECRET_KEY || !env.DB) {
@@ -1557,16 +1512,8 @@ export default {
           }, 400);
         }
 
-        const transaction = await verifyPaystackTransaction(
-          reference,
-          env
-        );
-
-        const { beats } = await getVerifiedPurchase(
-          transaction,
-          env
-        );
-
+        const transaction = await verifyPaystackTransaction(reference, env);
+        const { beats } = await getVerifiedPurchase(transaction, env);
         const purchasedBeats = [];
 
         for (const beat of beats) {
@@ -1596,7 +1543,6 @@ export default {
         });
       } catch (error) {
         console.error("Payment verification error:", error);
-
         return json({
           success: false,
           error: "Payment verification failed. Please try again."
@@ -1604,57 +1550,51 @@ export default {
       }
     }
 
+    // ========================================
     // SECURE DOWNLOAD
+    // ========================================
+
     if (path === "/api/download" && request.method === "GET") {
       try {
         if (!env.PAYSTACK_SECRET_KEY || !env.BEATS_BUCKET) {
-          return new Response(
-            "Download service is not configured.",
-            { status: 500 }
-          );
+          return new Response("Download service is not configured.", {
+            status: 500
+          });
         }
 
         const token = url.searchParams.get("token");
-
         if (!token) {
-          return new Response(
-            "Download token missing.",
-            { status: 400 }
-          );
+          return new Response("Download token missing.", { status: 400 });
         }
 
-        const data = await verifyDownloadToken(
-          token,
-          env.PAYSTACK_SECRET_KEY
-        );
-
+        const data = await verifyDownloadToken(token, env.PAYSTACK_SECRET_KEY);
         if (!data) {
-          return new Response(
-            "Invalid or expired download link.",
-            { status: 403 }
-          );
+          return new Response("Invalid or expired download link.", {
+            status: 403
+          });
         }
 
-        let beat = await getBeat(env, data.beatId);
+        let product = await getBeat(env, data.beatId);
 
-        // Preserve older purchase links if a record has since been removed.
-        if (!beat && LEGACY_BEATS[data.beatId]) {
-          beat = {
+        // Preserve legacy download links for the three original beats.
+        if (!product && LEGACY_BEATS[data.beatId]) {
+          product = {
             id: data.beatId,
             title: LEGACY_BEATS[data.beatId].title,
+            category: "beats",
             zip_key: null
           };
         }
 
-        if (!beat) {
-          return new Response("Beat not found.", { status: 404 });
+        if (!product) {
+          return new Response("Product not found.", { status: 404 });
         }
 
-        const object = await getZipObject(env, beat);
+        const object = await getZipObject(env, product);
 
         if (!object) {
           return new Response(
-            "Beat file not found in storage. Please contact support.",
+            "Product file not found in storage. Please contact support.",
             { status: 404 }
           );
         }
@@ -1664,22 +1604,17 @@ export default {
         headers.set("Content-Type", "application/zip");
         headers.set(
           "Content-Disposition",
-          `attachment; filename="${safeFilename(beat.title)}.zip"`
+          `attachment; filename="${safeFilename(product.title)}.zip"`
         );
         headers.set("Cache-Control", "private, no-store");
         headers.set("X-Content-Type-Options", "nosniff");
 
-        return new Response(object.body, {
-          status: 200,
-          headers
-        });
+        return new Response(object.body, { status: 200, headers });
       } catch (error) {
         console.error("Download error:", error);
-
-        return new Response(
-          "Download failed. Please try again.",
-          { status: 500 }
-        );
+        return new Response("Download failed. Please try again.", {
+          status: 500
+        });
       }
     }
 
