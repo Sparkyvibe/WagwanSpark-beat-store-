@@ -1,1 +1,342 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b0b0d">
+
+  <title>Studio Tools | WagwanSpark Sound Lab</title>
+  <meta
+    name="description"
+    content="Explore production tools and resources from WagwanSpark Sound Lab."
+  >
+
+  <link rel="stylesheet" href="styles.css">
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+  >
+</head>
+
+<body>
+  <!-- NAVIGATION -->
+  <header class="navbar">
+    <div class="navbar-container">
+      <a class="navbar-logo" href="index.html">
+        <span>WagwanSpark</span>
+      </a>
+
+      <button
+        class="navbar-toggle"
+        id="navbarToggle"
+        type="button"
+        aria-label="Toggle navigation"
+        aria-expanded="false"
+      >
+        <i class="fas fa-bars"></i>
+      </button>
+
+      <nav class="nav-menu" id="navMenu">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="index.html#beats">Beats</a>
+        <a class="nav-link" href="samples.html">Samples</a>
+        <a class="nav-link active" href="studio-tools.html">Studio Tools</a>
+      </nav>
+
+      <button
+        class="cart-toggle"
+        id="cartToggle"
+        type="button"
+        aria-label="Open shopping cart"
+      >
+        <i class="fas fa-shopping-cart"></i>
+        <span>Cart</span>
+        <span class="cart-count" id="cartCount">0</span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- STUDIO TOOLS HERO -->
+    <section class="store-hero">
+      <div class="container">
+        <p class="section-eyebrow">
+          <i class="fas fa-sliders"></i>
+          THE PRODUCER'S WORKSPACE
+        </p>
+
+        <h1>Tools for Your <span>Sound.</span></h1>
+
+        <p class="section-description">
+          Discover resources designed to support your production,
+          recording, mixing, and creative workflow.
+        </p>
+
+        <a class="btn btn-primary" href="#studio-tools">
+          Explore Studio Tools
+          <i class="fas fa-arrow-down"></i>
+        </a>
+      </div>
+    </section>
+
+    <!-- STUDIO TOOLS CATALOGUE -->
+    <section class="store-section" id="studio-tools">
+      <div class="container">
+        <div class="section-heading">
+          <div>
+            <p class="section-eyebrow">BUILT FOR CREATORS</p>
+            <h2>Studio Tools</h2>
+            <p class="section-description">
+              Find useful production resources and tools for your workflow.
+            </p>
+          </div>
+        </div>
+
+        <div class="catalogue-toolbar">
+          <label class="search-box" for="studioToolsSearch">
+            <i class="fas fa-search"></i>
+            <input
+              id="studioToolsSearch"
+              type="search"
+              placeholder="Search studio tools..."
+              autocomplete="off"
+            >
+          </label>
+        </div>
+
+        <div
+          id="studioToolsGrid"
+          class="product-grid"
+          aria-live="polite"
+        >
+          <div class="catalogue-loading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading studio tools...</p>
+          </div>
+        </div>
+
+        <div class="empty-catalogue" id="studioToolsEmpty" hidden>
+          <i class="fas fa-toolbox"></i>
+          <h3>No studio tools found</h3>
+          <p>Available products will appear here.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CALL TO ACTION -->
+    <section class="store-cta">
+      <div class="container">
+        <p class="section-eyebrow">EXPAND YOUR SOUND</p>
+        <h2>Everything Starts With an Idea.</h2>
+        <p>
+          Browse sample packs for fresh sounds to bring into your next session.
+        </p>
+
+        <a class="btn btn-primary" href="samples.html">
+          Browse Sample Packs
+          <i class="fas fa-arrow-right"></i>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="container footer-content">
+      <a class="navbar-logo" href="index.html">WagwanSpark</a>
+
+      <p>Let the vibe be your guide.</p>
+
+      <nav class="footer-navigation" aria-label="Footer navigation">
+        <a href="index.html">Home</a>
+        <a href="index.html#beats">Beats</a>
+        <a href="samples.html">Samples</a>
+        <a href="studio-tools.html">Studio Tools</a>
+      </nav>
+
+      <p class="footer-copyright">
+        &copy; <span id="currentYear"></span> WagwanSpark. All rights reserved.
+      </p>
+    </div>
+  </footer>
+
+  <!-- CART OVERLAY -->
+  <div class="cart-overlay" id="cartOverlay"></div>
+
+  <!-- SHARED CART DRAWER -->
+  <aside
+    class="cart-drawer"
+    id="cartDrawer"
+    aria-label="Shopping cart"
+    aria-hidden="true"
+  >
+    <div class="cart-header">
+      <div>
+        <p class="section-eyebrow">YOUR SELECTION</p>
+        <h2>Your Cart <span id="cartItemLabel"></span></h2>
+      </div>
+
+      <button
+        class="close-cart"
+        id="closeCart"
+        type="button"
+        aria-label="Close shopping cart"
+      >
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <div class="cart-body">
+      <div class="cart-empty" id="cartEmpty">
+        <i class="fas fa-shopping-bag"></i>
+        <h3>Your cart is empty</h3>
+        <p>Add a product to get started.</p>
+
+        <button
+          class="btn btn-primary"
+          id="cartContinueShopping"
+          type="button"
+        >
+          Browse Studio Tools
+        </button>
+      </div>
+
+      <div class="cart-items" id="cartItems"></div>
+    </div>
+
+    <div class="cart-summary" id="cartSummary">
+      <div class="cart-summary-row">
+        <span>Items</span>
+        <span id="cartSummaryCount">0</span>
+      </div>
+
+      <div class="cart-summary-row cart-total-row">
+        <span>Total</span>
+        <strong id="cartTotal">₦0</strong>
+      </div>
+
+      <button
+        class="btn btn-primary checkout-btn"
+        id="checkoutBtn"
+        type="button"
+      >
+        Proceed to Checkout
+        <i class="fas fa-lock"></i>
+      </button>
+
+      <button
+        class="btn btn-secondary"
+        id="continueShopping"
+        type="button"
+      >
+        Continue Shopping
+      </button>
+
+      <p class="checkout-note">
+        Secure checkout powered by Paystack.
+      </p>
+    </div>
+  </aside>
+
+  <!-- SHARED AUDIO PREVIEW PLAYER -->
+  <div class="player-modal" id="playerModal" aria-hidden="true">
+    <div class="player-backdrop" id="closePlayerBackdrop"></div>
+
+    <div class="player-content">
+      <button
+        class="player-close"
+        id="closePlayer"
+        type="button"
+        aria-label="Close audio player"
+      >
+        <i class="fas fa-times"></i>
+      </button>
+
+      <div class="player-artwork" id="playerArtwork">
+        <img id="playerImage" src="" alt="Studio tool artwork">
+      </div>
+
+      <div class="player-details">
+        <p class="section-eyebrow">AUDIO PREVIEW</p>
+        <h2 id="playerTitle">Product Preview</h2>
+        <p id="playerGenre">Studio Tools</p>
+
+        <audio id="audioPlayer" preload="none"></audio>
+
+        <div class="player-controls">
+          <button
+            id="playPauseBtn"
+            type="button"
+            aria-label="Play or pause preview"
+          >
+            <i class="fas fa-play"></i>
+          </button>
+
+          <div class="player-timeline">
+            <input
+              id="progressBar"
+              type="range"
+              min="0"
+              max="100"
+              value="0"
+              step="0.1"
+              aria-label="Audio progress"
+            >
+
+            <div class="player-time">
+              <span id="currentTime">0:00</span>
+              <span id="duration">0:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAYMENT AND STORE SCRIPTS -->
+  <script src="https://js.paystack.co/v2/inline.js"></script>
+  <script src="app.js?v=7"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const year = document.getElementById("currentYear");
+      if (year) year.textContent = new Date().getFullYear();
+
+      const search = document.getElementById("studioToolsSearch");
+      const grid = document.getElementById("studioToolsGrid");
+      const empty = document.getElementById("studioToolsEmpty");
+
+      if (search && grid) {
+        search.addEventListener("input", function () {
+          const query = search.value.trim().toLowerCase();
+          const cards = grid.querySelectorAll(
+            ".product-card, .sample-card, [data-product-id]"
+          );
+
+          let visibleCount = 0;
+
+          cards.forEach(function (card) {
+            const matches = card.textContent.toLowerCase().includes(query);
+            card.hidden = !matches;
+            if (matches) visibleCount++;
+          });
+
+          if (empty) {
+            empty.hidden = visibleCount !== 0 || cards.length === 0;
+          }
+        });
+      }
+
+      const closeBackdrop = document.getElementById("closePlayerBackdrop");
+      const closeButton = document.getElementById("closePlayer");
+
+      if (closeBackdrop && closeButton) {
+        closeBackdrop.addEventListener("click", function () {
+          closeButton.click();
+        });
+      }
+    });
+  </script>
+</body>
+</html>
