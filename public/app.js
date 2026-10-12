@@ -16,7 +16,7 @@
   const CART_STORAGE_KEY = "wagwanspark-cart-v3";
   const CATEGORIES = ["beats", "samples", "studio-tools"];
   const CHECKOUT_LABEL =
-    '<i class="fas fa-lock" aria-hidden="true"></i> Proceed to Checkout';
+    '<span>Proceed to Checkout</span> <i class="fas fa-lock" aria-hidden="true"></i>';
 
   const state = {
     products: {
@@ -262,21 +262,33 @@
       }
 
       /*
-       * Checkout button: visible, full-width, and above the
-       * bottom edge of the cart summary.
+       * IMPORTANT:
+       * Explicitly respect the HTML hidden attribute.
+       * The cart summary becomes visible when it contains items.
        */
-      #checkoutBtn {
+      #cartSummary[hidden] {
+        display: none !important;
+      }
+
+      #cartSummary:not([hidden]) {
+        display: block !important;
+        visibility: visible !important;
+        box-sizing: border-box;
+      }
+
+      #cartSummary .cart-checkout-btn,
+      #cartSummary #checkoutBtn,
+      #cartSummary #cartContinueShopping {
         box-sizing: border-box !important;
-        display: flex;
-        align-items: center !important;
-        justify-content: center !important;
         width: 100% !important;
         max-width: 100% !important;
         min-width: 0 !important;
         min-height: 46px !important;
         height: auto !important;
         padding: 12px 16px !important;
-        margin: 16px 0 0 !important;
+        margin: 12px 0 0 !important;
+        align-items: center !important;
+        justify-content: center !important;
         border-radius: 8px !important;
         font-size: 0.92rem !important;
         font-weight: 700 !important;
@@ -284,17 +296,28 @@
         white-space: normal !important;
         text-align: center !important;
         cursor: pointer;
-        position: relative;
-        z-index: 5;
       }
 
-      #checkoutBtn:disabled {
+      #cartSummary .cart-checkout-btn,
+      #cartSummary #checkoutBtn {
+        display: flex !important;
+        gap: 8px;
+      }
+
+      #cartSummary #cartContinueShopping {
+        display: flex !important;
+        background: transparent;
+        color: inherit;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+      }
+
+      #cartSummary #checkoutBtn:disabled {
         opacity: 0.6;
         cursor: not-allowed;
       }
 
-      #cartSummary {
-        box-sizing: border-box;
+      #cartSummary .cart-checkout-note {
+        margin: 12px 0;
       }
 
       @media (max-width: 480px) {
@@ -709,72 +732,35 @@
   }
 
   /*
-   * Create or reuse one checkout button.
-   * The click handler is attached here so the button remains functional
-   * even if it has to be moved into the cart summary.
+   * Reuse the checkout button already in index.html.
+   * Do not move it or the Continue Shopping button out of
+   * #cartSummary: both must remain in the existing cart layout.
    */
   function ensureCheckoutButton() {
-  const drawer = document.getElementById("cartDrawer");
-  const summary = document.getElementById("cartSummary");
-  const items = document.getElementById("cartItems");
+    const summary = document.getElementById("cartSummary");
 
-  if (!drawer) {
-    console.error("Cart drawer #cartDrawer was not found.");
-    return;
+    if (!summary) {
+      console.error("Cart summary #cartSummary was not found.");
+      return null;
+    }
+
+    let button = document.getElementById("checkoutBtn");
+
+    if (!button) {
+      button = document.createElement("button");
+      button.id = "checkoutBtn";
+      button.type = "button";
+      button.className = "btn btn-primary cart-checkout-btn";
+      button.innerHTML = CHECKOUT_LABEL;
+      summary.appendChild(button);
+    }
+
+    button.type = "button";
+    button.style.boxSizing = "border-box";
+    button.style.width = "100%";
+
+    return button;
   }
-
-  const target = summary || items?.parentElement || drawer;
-
-  let continueBtn = document.getElementById("continueShoppingBtn");
-  if (!continueBtn) {
-    continueBtn = document.createElement("button");
-    continueBtn.id = "continueShoppingBtn";
-    continueBtn.type = "button";
-    continueBtn.textContent = "Continue Shopping";
-    continueBtn.className = "btn btn-secondary";
-  }
-
-  if (continueBtn.parentElement !== target) {
-    target.appendChild(continueBtn);
-  }
-
-  continueBtn.style.display = "flex";
-  continueBtn.style.width = "100%";
-  continueBtn.style.boxSizing = "border-box";
-  continueBtn.style.justifyContent = "center";
-  continueBtn.style.alignItems = "center";
-  continueBtn.style.marginTop = "10px";
-
-  if (!continueBtn.dataset.bound) {
-    continueBtn.addEventListener("click", closeCart);
-    continueBtn.dataset.bound = "true";
-  }
-
-  let checkoutBtn = document.getElementById("checkoutBtn");
-  if (!checkoutBtn) {
-    checkoutBtn = document.createElement("button");
-    checkoutBtn.id = "checkoutBtn";
-    checkoutBtn.type = "button";
-    checkoutBtn.className = "btn btn-primary";
-    checkoutBtn.innerHTML = "Proceed to Checkout 🔒";
-  }
-
-  if (checkoutBtn.parentElement !== target) {
-    target.appendChild(checkoutBtn);
-  }
-
-  checkoutBtn.style.display = state.cart.length ? "flex" : "none";
-  checkoutBtn.style.width = "100%";
-  checkoutBtn.style.boxSizing = "border-box";
-  checkoutBtn.style.justifyContent = "center";
-  checkoutBtn.style.alignItems = "center";
-  checkoutBtn.style.marginTop = "10px";
-
-  if (!checkoutBtn.dataset.bound) {
-    checkoutBtn.addEventListener("click", checkoutCart);
-    checkoutBtn.dataset.bound = "true";
-  }
-}
 
   function renderCart() {
     const products = getCartProducts();
@@ -796,11 +782,22 @@
     if (cartTotal) cartTotal.textContent = money(total);
 
     const cartEmpty = document.getElementById("cartEmpty");
-    if (cartEmpty) cartEmpty.style.display = count ? "none" : "block";
 
+    if (cartEmpty) {
+      cartEmpty.style.display = count ? "none" : "flex";
+    }
+
+    /*
+     * FIX: update the actual hidden attribute as well as display.
+     * Setting display alone does not reliably unhide an element
+     * that still has the HTML hidden attribute.
+     */
     const cartSummary = document.getElementById("cartSummary");
+
     if (cartSummary) {
+      cartSummary.hidden = count === 0;
       cartSummary.style.display = count ? "block" : "none";
+      cartSummary.setAttribute("aria-hidden", count ? "false" : "true");
     }
 
     const cartItems = document.getElementById("cartItems");
@@ -837,15 +834,24 @@
 
     if (checkoutButton) {
       checkoutButton.disabled = count === 0 || state.checkoutBusy;
-      checkoutButton.style.display = count ? "flex" : "none";
-      checkoutButton.style.visibility = count ? "visible" : "hidden";
+      checkoutButton.style.display = "flex";
+      checkoutButton.style.visibility = "visible";
 
-      if (!state.checkoutBusy) {
-        checkoutButton.innerHTML = CHECKOUT_LABEL;
-      } else {
-        checkoutButton.innerHTML =
-          '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Connecting to Paystack...';
-      }
+      checkoutButton.innerHTML = state.checkoutBusy
+        ? '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Connecting to Paystack...'
+        : CHECKOUT_LABEL;
+    }
+
+    /*
+     * Keep the existing Continue Shopping button in the summary.
+     * It is visible with the summary when the cart has products.
+     */
+    const continueButton =
+      document.getElementById("cartContinueShopping");
+
+    if (continueButton) {
+      continueButton.style.display = "flex";
+      continueButton.style.width = "100%";
     }
 
     $$("[data-action='add']").forEach(button => {
@@ -1102,15 +1108,8 @@
       payload.beatId = beatIds[0];
     }
 
-    const checkoutButton = ensureCheckoutButton();
-
     state.checkoutBusy = true;
-
-    if (checkoutButton) {
-      checkoutButton.disabled = true;
-      checkoutButton.innerHTML =
-        '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Connecting to Paystack...';
-    }
+    renderCart();
 
     try {
       const response = await fetch(API.payment, {
@@ -1150,14 +1149,7 @@
       alert(error.message || "Checkout failed. Please try again.");
     } finally {
       state.checkoutBusy = false;
-
-      const button = ensureCheckoutButton();
-
-      if (button) {
-        button.disabled = getCartProducts().length === 0;
-        button.innerHTML = CHECKOUT_LABEL;
-        button.style.display = state.cart.length ? "flex" : "none";
-      }
+      renderCart();
     }
   }
 
@@ -1248,6 +1240,10 @@
     const cartToggle = document.getElementById("cartToggle");
     if (cartToggle) cartToggle.addEventListener("click", openCart);
 
+    /*
+     * These are the existing buttons from index.html.
+     * Keep their original IDs and bind them directly.
+     */
     [
       "closeCart",
       "cartContinueShopping",
@@ -1256,6 +1252,12 @@
       const element = document.getElementById(id);
       if (element) element.addEventListener("click", closeCart);
     });
+
+    const checkoutButton = ensureCheckoutButton();
+
+    if (checkoutButton) {
+      checkoutButton.addEventListener("click", checkoutCart);
+    }
 
     const overlay = document.getElementById("cartOverlay");
     if (overlay) overlay.addEventListener("click", closeCart);
@@ -1358,8 +1360,19 @@
   document.addEventListener("DOMContentLoaded", async () => {
     installStoreInteractionStyles();
     loadCart();
-    ensureCheckoutButton();
     bindEvents();
+
+    /*
+     * Initially hide the summary because the cart has not yet
+     * been populated from the loaded catalogues.
+     */
+    const summary = document.getElementById("cartSummary");
+    if (summary) {
+      summary.hidden = true;
+      summary.style.display = "none";
+    }
+
+    renderCart();
 
     try {
       await loadCatalogues();
