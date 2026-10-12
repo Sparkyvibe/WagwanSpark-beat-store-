@@ -714,49 +714,67 @@
    * even if it has to be moved into the cart summary.
    */
   function ensureCheckoutButton() {
-    const drawer = document.getElementById("cartDrawer");
-    const summary = document.getElementById("cartSummary");
-    const items = document.getElementById("cartItems");
+  const drawer = document.getElementById("cartDrawer");
+  const summary = document.getElementById("cartSummary");
+  const items = document.getElementById("cartItems");
 
-    let button = document.getElementById("checkoutBtn");
-
-    /*
-     * Prefer the summary, because it normally contains the cart total.
-     * If the summary is absent, use the cart-items container's parent.
-     */
-    const target = summary || items?.parentElement || drawer;
-
-    if (!target) {
-      console.error(
-        "Checkout button could not be added: #cartDrawer was not found."
-      );
-      return null;
-    }
-
-    if (!button) {
-      button = document.createElement("button");
-      button.id = "checkoutBtn";
-      button.type = "button";
-      button.className = "btn btn-primary";
-      button.innerHTML = CHECKOUT_LABEL;
-    }
-
-    if (button.parentElement !== target) {
-      target.appendChild(button);
-    } else if (target.lastElementChild !== button) {
-      target.appendChild(button);
-    }
-
-    button.type = "button";
-    button.setAttribute("aria-label", "Proceed to checkout with cart items");
-
-    if (!button.dataset.checkoutBound) {
-      button.addEventListener("click", checkoutCart);
-      button.dataset.checkoutBound = "true";
-    }
-
-    return button;
+  if (!drawer) {
+    console.error("Cart drawer #cartDrawer was not found.");
+    return;
   }
+
+  const target = summary || items?.parentElement || drawer;
+
+  let continueBtn = document.getElementById("continueShoppingBtn");
+  if (!continueBtn) {
+    continueBtn = document.createElement("button");
+    continueBtn.id = "continueShoppingBtn";
+    continueBtn.type = "button";
+    continueBtn.textContent = "Continue Shopping";
+    continueBtn.className = "btn btn-secondary";
+  }
+
+  if (continueBtn.parentElement !== target) {
+    target.appendChild(continueBtn);
+  }
+
+  continueBtn.style.display = "flex";
+  continueBtn.style.width = "100%";
+  continueBtn.style.boxSizing = "border-box";
+  continueBtn.style.justifyContent = "center";
+  continueBtn.style.alignItems = "center";
+  continueBtn.style.marginTop = "10px";
+
+  if (!continueBtn.dataset.bound) {
+    continueBtn.addEventListener("click", closeCart);
+    continueBtn.dataset.bound = "true";
+  }
+
+  let checkoutBtn = document.getElementById("checkoutBtn");
+  if (!checkoutBtn) {
+    checkoutBtn = document.createElement("button");
+    checkoutBtn.id = "checkoutBtn";
+    checkoutBtn.type = "button";
+    checkoutBtn.className = "btn btn-primary";
+    checkoutBtn.innerHTML = "Proceed to Checkout 🔒";
+  }
+
+  if (checkoutBtn.parentElement !== target) {
+    target.appendChild(checkoutBtn);
+  }
+
+  checkoutBtn.style.display = state.cart.length ? "flex" : "none";
+  checkoutBtn.style.width = "100%";
+  checkoutBtn.style.boxSizing = "border-box";
+  checkoutBtn.style.justifyContent = "center";
+  checkoutBtn.style.alignItems = "center";
+  checkoutBtn.style.marginTop = "10px";
+
+  if (!checkoutBtn.dataset.bound) {
+    checkoutBtn.addEventListener("click", checkoutCart);
+    checkoutBtn.dataset.bound = "true";
+  }
+}
 
   function renderCart() {
     const products = getCartProducts();
