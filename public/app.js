@@ -106,6 +106,8 @@
     item.previewAudio = safeText(
       item.previewAudio ||
       item.preview_audio ||
+      item.previewAudioUrl ||
+      item.preview_audio_url ||
       item.previewUrl ||
       item.preview_url ||
       ""
@@ -261,11 +263,6 @@
         cursor: not-allowed;
       }
 
-      /*
-       * IMPORTANT:
-       * Explicitly respect the HTML hidden attribute.
-       * The cart summary becomes visible when it contains items.
-       */
       #cartSummary[hidden] {
         display: none !important;
       }
@@ -418,7 +415,13 @@
   function productCard(product, category = product.category) {
     const key = cartKey(product);
     const inCart = state.cart.includes(key);
-    const playable = category === "beats" && Boolean(product.previewAudio);
+
+    // Beats and Samples both use the same artwork preview control.
+    // Studio Tools remain non-previewable.
+    const playable =
+      (category === "beats" || category === "samples") &&
+      Boolean(product.previewAudio);
+
     const metadata = [];
 
     if (product.genre) {
@@ -731,11 +734,6 @@
     renderAll();
   }
 
-  /*
-   * Reuse the checkout button already in index.html.
-   * Do not move it or the Continue Shopping button out of
-   * #cartSummary: both must remain in the existing cart layout.
-   */
   function ensureCheckoutButton() {
     const summary = document.getElementById("cartSummary");
 
@@ -787,11 +785,6 @@
       cartEmpty.style.display = count ? "none" : "flex";
     }
 
-    /*
-     * FIX: update the actual hidden attribute as well as display.
-     * Setting display alone does not reliably unhide an element
-     * that still has the HTML hidden attribute.
-     */
     const cartSummary = document.getElementById("cartSummary");
 
     if (cartSummary) {
@@ -842,10 +835,6 @@
         : CHECKOUT_LABEL;
     }
 
-    /*
-     * Keep the existing Continue Shopping button in the summary.
-     * It is visible with the summary when the cart has products.
-     */
     const continueButton =
       document.getElementById("cartContinueShopping");
 
@@ -1161,10 +1150,6 @@
   }
 
   function bindEvents() {
-    /*
-     * One delegated click listener handles product additions,
-     * removals and artwork preview clicks.
-     */
     document.addEventListener("click", event => {
       const target = event.target instanceof Element
         ? event.target
@@ -1196,10 +1181,7 @@
         return;
       }
 
-      /*
-       * Artwork/card taps toggle preview playback.
-       * Interactive controls do not trigger preview playback.
-       */
+      // Artwork taps toggle playback for Beats and Samples.
       const card = target.closest(
         ".product-card[data-previewable='true']"
       );
@@ -1240,10 +1222,6 @@
     const cartToggle = document.getElementById("cartToggle");
     if (cartToggle) cartToggle.addEventListener("click", openCart);
 
-    /*
-     * These are the existing buttons from index.html.
-     * Keep their original IDs and bind them directly.
-     */
     [
       "closeCart",
       "cartContinueShopping",
@@ -1362,10 +1340,6 @@
     loadCart();
     bindEvents();
 
-    /*
-     * Initially hide the summary because the cart has not yet
-     * been populated from the loaded catalogues.
-     */
     const summary = document.getElementById("cartSummary");
     if (summary) {
       summary.hidden = true;
