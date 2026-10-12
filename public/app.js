@@ -15,6 +15,8 @@
 
   const CART_STORAGE_KEY = "wagwanspark-cart-v3";
   const CATEGORIES = ["beats", "samples", "studio-tools"];
+  const CHECKOUT_LABEL =
+    '<i class="fas fa-lock" aria-hidden="true"></i> Proceed to Checkout';
 
   const state = {
     products: {
@@ -25,7 +27,8 @@
     cart: [],
     activePreview: null,
     activeFilter: "all",
-    search: ""
+    search: "",
+    checkoutBusy: false
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -66,7 +69,6 @@
 
     item.id = safeText(item.id);
     item.title = safeText(item.title || item.name || item.id);
-
     item.category = CATEGORIES.includes(item.category)
       ? item.category
       : category;
@@ -109,18 +111,14 @@
       ""
     );
 
-    item.formats = Array.isArray(item.formats)
-      ? item.formats
-      : [];
+    item.formats = Array.isArray(item.formats) ? item.formats : [];
 
     return item;
   }
 
   async function getJson(url) {
     const response = await fetch(url, {
-      headers: {
-        Accept: "application/json"
-      },
+      headers: { Accept: "application/json" },
       cache: "no-store"
     });
 
@@ -139,24 +137,14 @@
     return data;
   }
 
-  /*
-   * These are targeted styling fixes.
-   * The existing site's main visual design remains in control.
-   */
   function installStoreInteractionStyles() {
-    if (document.getElementById("wagwanspark-interaction-fixes")) {
-      return;
-    }
+    if (document.getElementById("wagwanspark-interaction-fixes")) return;
 
     const style = document.createElement("style");
     style.id = "wagwanspark-interaction-fixes";
 
     style.textContent = `
-      /* Beat artwork remains the preview control. */
-      .product-card-playable {
-        cursor: pointer;
-      }
-
+      .product-card-playable,
       .product-card-playable .product-artwork,
       .product-card-playable .product-artwork img {
         cursor: pointer;
@@ -181,7 +169,8 @@
       }
 
       .product-card-playable .product-artwork:hover .artwork-play-overlay,
-      .product-card-playable:focus-within .artwork-play-overlay {
+      .product-card-playable:focus-within .artwork-play-overlay,
+      .product-card-playable.is-preview-playing .artwork-play-overlay {
         opacity: 1;
       }
 
@@ -199,21 +188,12 @@
         box-shadow: 0 3px 18px rgba(0, 0, 0, 0.25);
       }
 
-      .product-card-playable .product-artwork:hover .artwork-play-overlay {
-        opacity: 1;
-      }
-
-      .product-card-playable.is-preview-playing .artwork-play-overlay {
-        opacity: 1;
-      }
-
       .product-card-playable.is-preview-playing .artwork-play-icon {
         color: #101010;
         background: #19d66b;
         border-color: #19d66b;
       }
 
-      /* Original compact metadata row with icons. */
       .product-meta {
         display: flex;
         flex-wrap: wrap;
@@ -232,7 +212,6 @@
         opacity: 0.9;
       }
 
-      /* MP3 + WAV should read as a green format label. */
       .product-format {
         color: #19d66b !important;
         font-weight: 700 !important;
@@ -244,7 +223,6 @@
         padding: 0 3px;
       }
 
-      /* One full-width Add to Cart button. */
       .product-actions {
         display: flex !important;
         flex-direction: column !important;
@@ -278,24 +256,24 @@
         cursor: pointer;
       }
 
-      .product-actions .product-add-btn {
-        order: 1;
-      }
-
       .product-actions .btn:disabled {
         opacity: 0.55;
         cursor: not-allowed;
       }
 
-      /* Checkout must remain visible when the cart has products. */
+      /*
+       * Checkout button: visible, full-width, and above the
+       * bottom edge of the cart summary.
+       */
       #checkoutBtn {
         box-sizing: border-box !important;
+        display: flex;
         align-items: center !important;
         justify-content: center !important;
         width: 100% !important;
         max-width: 100% !important;
         min-width: 0 !important;
-        min-height: 44px !important;
+        min-height: 46px !important;
         height: auto !important;
         padding: 12px 16px !important;
         margin: 16px 0 0 !important;
@@ -306,11 +284,17 @@
         white-space: normal !important;
         text-align: center !important;
         cursor: pointer;
+        position: relative;
+        z-index: 5;
       }
 
       #checkoutBtn:disabled {
         opacity: 0.6;
         cursor: not-allowed;
+      }
+
+      #cartSummary {
+        box-sizing: border-box;
       }
 
       @media (max-width: 480px) {
@@ -361,11 +345,7 @@
         data.beats || data.products || []
       ).map(item => normalizeProduct(item, "beats"));
     } else {
-      console.error(
-        "Beat catalogue could not load:",
-        results[0].reason
-      );
-
+      console.error("Beat catalogue could not load:", results[0].reason);
       showMessage(
         "beatsGrid",
         "Beats could not load. Please refresh the page and try again."
@@ -382,19 +362,11 @@
           data.products || data.beats || []
         ).map(item => normalizeProduct(item, category));
       } else {
-        console.error(
-          `${category} catalogue could not load:`,
-          result.reason
-        );
-
+        console.error(`${category} catalogue could not load:`, result.reason);
         state.products[category] = [];
 
-        const gridId = category === "samples"
-          ? "samplesGrid"
-          : "studioToolsGrid";
-
         showMessage(
-          gridId,
+          category === "samples" ? "samplesGrid" : "studioToolsGrid",
           `${categoryLabel(category)} catalogue could not load. Please refresh the page.`
         );
       }
@@ -423,9 +395,7 @@
   function productCard(product, category = product.category) {
     const key = cartKey(product);
     const inCart = state.cart.includes(key);
-    const previewAvailable = Boolean(product.previewAudio);
-    const playable = category === "beats" && previewAvailable;
-
+    const playable = category === "beats" && Boolean(product.previewAudio);
     const metadata = [];
 
     if (product.genre) {
@@ -500,9 +470,7 @@
         data-product-id="${escapeHtml(product.id)}"
         data-category="${escapeHtml(category)}"
         data-previewable="${playable ? "true" : "false"}"
-        ${playable
-          ? 'title="Tap the artwork to play or pause the preview"'
-          : ""}
+        ${playable ? 'title="Tap the artwork to play or pause the preview"' : ""}
       >
         <div class="beat-artwork product-artwork">
           <img
@@ -539,8 +507,8 @@
               data-category="${escapeHtml(category)}"
             >
               ${inCart
-                ? '<i class="fas fa-check"></i> Added to Cart'
-                : '<i class="fas fa-cart-plus"></i> Add to Cart'}
+                ? '<i class="fas fa-check" aria-hidden="true"></i> Added to Cart'
+                : '<i class="fas fa-cart-plus" aria-hidden="true"></i> Add to Cart'}
             </button>
           </div>
         </div>
@@ -554,15 +522,9 @@
       : "studioToolsGrid";
 
     let grid = document.getElementById(gridId);
+    if (grid) return grid;
 
-    if (grid) {
-      return grid;
-    }
-
-    const sectionId = category === "samples"
-      ? "samples"
-      : "studio-tools";
-
+    const sectionId = category === "samples" ? "samples" : "studio-tools";
     let section = document.getElementById(sectionId);
 
     if (!section) {
@@ -575,15 +537,10 @@
     }
 
     const comingSoon = $(".category-coming-soon", section);
-
-    if (comingSoon) {
-      comingSoon.remove();
-    }
+    if (comingSoon) comingSoon.remove();
 
     if (!$(".section-header", section)) {
-      const title = category === "samples"
-        ? "Sample Packs"
-        : "Studio Tools";
+      const title = category === "samples" ? "Sample Packs" : "Studio Tools";
 
       section.insertAdjacentHTML(
         "afterbegin",
@@ -649,9 +606,7 @@
 
       const genres = [
         ...new Set(
-          state.products.beats
-            .map(item => item.genre)
-            .filter(Boolean)
+          state.products.beats.map(item => item.genre).filter(Boolean)
         )
       ].sort();
 
@@ -667,16 +622,11 @@
       genreFilter.value = [
         "all",
         ...genres.map(genre => genre.toLowerCase())
-      ].includes(current)
-        ? current
-        : "all";
+      ].includes(current) ? current : "all";
     }
 
     const pagination = document.getElementById("pagination");
-
-    if (pagination) {
-      pagination.innerHTML = "";
-    }
+    if (pagination) pagination.innerHTML = "";
   }
 
   function renderProductCategory(category) {
@@ -703,10 +653,7 @@
 
   function saveCart() {
     try {
-      localStorage.setItem(
-        CART_STORAGE_KEY,
-        JSON.stringify(state.cart)
-      );
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.cart));
     } catch (error) {
       console.warn("Cart could not be saved.", error);
     }
@@ -741,9 +688,7 @@
   }
 
   function addToCart(product, openDrawer = true) {
-    if (!product) {
-      return;
-    }
+    if (!product) return;
 
     const key = cartKey(product);
 
@@ -754,21 +699,19 @@
     saveCart();
     renderAll();
 
-    if (openDrawer) {
-      openCart();
-    }
+    if (openDrawer) openCart();
   }
 
   function removeFromCart(key) {
     state.cart = state.cart.filter(item => item !== key);
-
     saveCart();
     renderAll();
   }
 
   /*
-   * Reuse the existing checkout button where possible.
-   * If the HTML does not contain one, create it.
+   * Create or reuse one checkout button.
+   * The click handler is attached here so the button remains functional
+   * even if it has to be moved into the cart summary.
    */
   function ensureCheckoutButton() {
     const drawer = document.getElementById("cartDrawer");
@@ -777,11 +720,15 @@
 
     let button = document.getElementById("checkoutBtn");
 
+    /*
+     * Prefer the summary, because it normally contains the cart total.
+     * If the summary is absent, use the cart-items container's parent.
+     */
     const target = summary || items?.parentElement || drawer;
 
     if (!target) {
       console.error(
-        "Checkout button could not be added because #cartDrawer is missing."
+        "Checkout button could not be added: #cartDrawer was not found."
       );
       return null;
     }
@@ -791,24 +738,22 @@
       button.id = "checkoutBtn";
       button.type = "button";
       button.className = "btn btn-primary";
-      button.innerHTML =
-        '<i class="fas fa-lock"></i> Proceed to Checkout';
+      button.innerHTML = CHECKOUT_LABEL;
     }
 
-    if (
-      button.parentElement !== target ||
-      target.lastElementChild !== button
-    ) {
+    if (button.parentElement !== target) {
+      target.appendChild(button);
+    } else if (target.lastElementChild !== button) {
       target.appendChild(button);
     }
 
-    button.style.display = "flex";
-    button.style.visibility = "visible";
+    button.type = "button";
+    button.setAttribute("aria-label", "Proceed to checkout with cart items");
 
-    button.setAttribute(
-      "aria-label",
-      "Proceed to checkout with cart items"
-    );
+    if (!button.dataset.checkoutBound) {
+      button.addEventListener("click", checkoutCart);
+      button.dataset.checkoutBound = "true";
+    }
 
     return button;
   }
@@ -816,45 +761,26 @@
   function renderCart() {
     const products = getCartProducts();
     const count = products.length;
-
-    const total = products.reduce(
-      (sum, item) => sum + item.price,
-      0
-    );
+    const total = products.reduce((sum, item) => sum + item.price, 0);
 
     const cartCount = document.getElementById("cartCount");
-
-    if (cartCount) {
-      cartCount.textContent = String(count);
-    }
+    if (cartCount) cartCount.textContent = String(count);
 
     const itemLabel = document.getElementById("cartItemLabel");
-
     if (itemLabel) {
-      itemLabel.textContent =
-        `${count} ${count === 1 ? "item" : "items"}`;
+      itemLabel.textContent = `${count} ${count === 1 ? "item" : "items"}`;
     }
 
     const summaryCount = document.getElementById("cartSummaryCount");
-
-    if (summaryCount) {
-      summaryCount.textContent = String(count);
-    }
+    if (summaryCount) summaryCount.textContent = String(count);
 
     const cartTotal = document.getElementById("cartTotal");
-
-    if (cartTotal) {
-      cartTotal.textContent = money(total);
-    }
+    if (cartTotal) cartTotal.textContent = money(total);
 
     const cartEmpty = document.getElementById("cartEmpty");
-
-    if (cartEmpty) {
-      cartEmpty.style.display = count ? "none" : "block";
-    }
+    if (cartEmpty) cartEmpty.style.display = count ? "none" : "block";
 
     const cartSummary = document.getElementById("cartSummary");
-
     if (cartSummary) {
       cartSummary.style.display = count ? "block" : "none";
     }
@@ -883,7 +809,7 @@
             data-remove="${escapeHtml(cartKey(product))}"
             aria-label="Remove ${escapeHtml(product.title)}"
           >
-            <i class="fas fa-trash"></i>
+            <i class="fas fa-trash" aria-hidden="true"></i>
           </button>
         </div>
       `).join("");
@@ -892,12 +818,15 @@
     const checkoutButton = ensureCheckoutButton();
 
     if (checkoutButton) {
-      checkoutButton.disabled = count === 0;
+      checkoutButton.disabled = count === 0 || state.checkoutBusy;
       checkoutButton.style.display = count ? "flex" : "none";
+      checkoutButton.style.visibility = count ? "visible" : "hidden";
 
-      if (!checkoutButton.innerHTML.trim()) {
+      if (!state.checkoutBusy) {
+        checkoutButton.innerHTML = CHECKOUT_LABEL;
+      } else {
         checkoutButton.innerHTML =
-          '<i class="fas fa-lock"></i> Proceed to Checkout';
+          '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Connecting to Paystack...';
       }
     }
 
@@ -909,8 +838,8 @@
 
       if (product) {
         button.innerHTML = state.cart.includes(cartKey(product))
-          ? '<i class="fas fa-check"></i> Added to Cart'
-          : '<i class="fas fa-cart-plus"></i> Add to Cart';
+          ? '<i class="fas fa-check" aria-hidden="true"></i> Added to Cart'
+          : '<i class="fas fa-cart-plus" aria-hidden="true"></i> Add to Cart';
       }
     });
 
@@ -918,6 +847,8 @@
   }
 
   function openCart() {
+    renderCart();
+
     const drawer = document.getElementById("cartDrawer");
     const overlay = document.getElementById("cartOverlay");
 
@@ -932,10 +863,7 @@
     }
 
     const toggle = document.getElementById("cartToggle");
-
-    if (toggle) {
-      toggle.setAttribute("aria-expanded", "true");
-    }
+    if (toggle) toggle.setAttribute("aria-expanded", "true");
 
     document.body.classList.add("cart-open");
   }
@@ -955,28 +883,19 @@
     }
 
     const toggle = document.getElementById("cartToggle");
-
-    if (toggle) {
-      toggle.setAttribute("aria-expanded", "false");
-    }
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
 
     document.body.classList.remove("cart-open");
   }
 
   function openPreview(product) {
-    if (!product || !product.previewAudio) {
-      return;
-    }
+    if (!product || !product.previewAudio) return;
 
     const modal = document.getElementById("playerModal");
     const audio = document.getElementById("audioPlayer");
 
     if (!modal || !audio) {
-      window.open(
-        product.previewAudio,
-        "_blank",
-        "noopener,noreferrer"
-      );
+      window.open(product.previewAudio, "_blank", "noopener,noreferrer");
       return;
     }
 
@@ -985,22 +904,15 @@
     const image = document.getElementById("playerImage");
     const artwork = document.getElementById("playerArtwork");
 
-    if (title) {
-      title.textContent = product.title;
-    }
+    if (title) title.textContent = product.title;
 
     if (genre) {
       genre.textContent =
         `${categoryLabel(product.category)}${product.genre ? ` · ${product.genre}` : ""}`;
     }
 
-    if (image) {
-      image.src = productArtwork(product);
-    }
-
-    if (artwork) {
-      artwork.classList.remove("artwork-placeholder");
-    }
+    if (image) image.src = productArtwork(product);
+    if (artwork) artwork.classList.remove("artwork-placeholder");
 
     audio.pause();
     audio.src = product.previewAudio;
@@ -1020,27 +932,24 @@
       })
       .catch(error => {
         console.error("Preview playback failed:", error);
-
         alert(
           "The preview could not be played. Check that the uploaded audio file is valid and accessible."
         );
-
         updatePlayButton();
         updateCardPlayIcons();
       });
   }
 
   function toggleCardPreview(product) {
-    if (!product || !product.previewAudio) {
-      return;
-    }
+    if (!product || !product.previewAudio) return;
 
     const audio = document.getElementById("audioPlayer");
 
-    const sameProduct =
+    const sameProduct = Boolean(
       state.activePreview &&
       state.activePreview.id === product.id &&
-      state.activePreview.category === product.category;
+      state.activePreview.category === product.category
+    );
 
     if (sameProduct && audio) {
       if (audio.paused) {
@@ -1049,16 +958,13 @@
             updatePlayButton();
             updateCardPlayIcons();
           })
-          .catch(() => {
-            alert("Could not play this preview.");
-          });
+          .catch(() => alert("Could not play this preview."));
       } else {
         audio.pause();
       }
 
       updatePlayButton();
       updateCardPlayIcons();
-
       return;
     }
 
@@ -1081,7 +987,6 @@
     }
 
     state.activePreview = null;
-
     updatePlayButton();
     updateCardPlayIcons();
   }
@@ -1090,23 +995,20 @@
     const audio = document.getElementById("audioPlayer");
 
     $$(".product-card-playable").forEach(card => {
-      const isActive =
+      const isActive = Boolean(
         state.activePreview &&
         state.activePreview.id === card.dataset.productId &&
-        state.activePreview.category === card.dataset.category;
-
-      const isPlaying = Boolean(
-        isActive && audio && !audio.paused
+        state.activePreview.category === card.dataset.category
       );
+
+      const isPlaying = Boolean(isActive && audio && !audio.paused);
 
       card.classList.toggle("is-preview-playing", isPlaying);
 
       const icon = $(".artwork-play-icon i", card);
 
       if (icon) {
-        icon.className = isPlaying
-          ? "fas fa-pause"
-          : "fas fa-play";
+        icon.className = isPlaying ? "fas fa-pause" : "fas fa-play";
       }
     });
   }
@@ -1117,8 +1019,8 @@
 
     if (audio && button) {
       button.innerHTML = audio.paused
-        ? '<i class="fas fa-play"></i>'
-        : '<i class="fas fa-pause"></i>';
+        ? '<i class="fas fa-play" aria-hidden="true"></i>'
+        : '<i class="fas fa-pause" aria-hidden="true"></i>';
 
       button.setAttribute(
         "aria-label",
@@ -1130,9 +1032,7 @@
   }
 
   function formatTime(seconds) {
-    if (!Number.isFinite(seconds)) {
-      return "0:00";
-    }
+    if (!Number.isFinite(seconds)) return "0:00";
 
     const value = Math.max(0, Math.floor(seconds));
 
@@ -1140,10 +1040,13 @@
   }
 
   async function checkoutCart() {
+    if (state.checkoutBusy) return;
+
     const products = getCartProducts();
 
     if (!products.length) {
       alert("Your cart is empty. Add a product before checkout.");
+      renderCart();
       return;
     }
 
@@ -1151,9 +1054,7 @@
       "Enter the email address where your secure download links should be sent:"
     );
 
-    if (email === null) {
-      return;
-    }
+    if (email === null) return;
 
     const cleanedEmail = email.trim();
 
@@ -1185,14 +1086,12 @@
 
     const checkoutButton = ensureCheckoutButton();
 
-    const originalText = checkoutButton
-      ? checkoutButton.innerHTML
-      : '<i class="fas fa-lock"></i> Proceed to Checkout';
+    state.checkoutBusy = true;
 
     if (checkoutButton) {
       checkoutButton.disabled = true;
       checkoutButton.innerHTML =
-        '<i class="fas fa-spinner fa-spin"></i> Connecting to Paystack...';
+        '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Connecting to Paystack...';
     }
 
     try {
@@ -1230,12 +1129,16 @@
       window.location.href = result.data.authorization_url;
     } catch (error) {
       console.error("Checkout error:", error);
-
       alert(error.message || "Checkout failed. Please try again.");
+    } finally {
+      state.checkoutBusy = false;
 
-      if (checkoutButton) {
-        checkoutButton.disabled = false;
-        checkoutButton.innerHTML = originalText;
+      const button = ensureCheckoutButton();
+
+      if (button) {
+        button.disabled = getCartProducts().length === 0;
+        button.innerHTML = CHECKOUT_LABEL;
+        button.style.display = state.cart.length ? "flex" : "none";
       }
     }
   }
@@ -1248,14 +1151,16 @@
   }
 
   function bindEvents() {
+    /*
+     * One delegated click listener handles product additions,
+     * removals and artwork preview clicks.
+     */
     document.addEventListener("click", event => {
       const target = event.target instanceof Element
         ? event.target
         : event.target?.parentElement;
 
-      if (!target) {
-        return;
-      }
+      if (!target) return;
 
       const actionButton = target.closest("[data-action]");
 
@@ -1265,13 +1170,9 @@
           actionButton.dataset.category
         );
 
-        if (!product) {
-          return;
-        }
+        if (!product) return;
 
-        const action = actionButton.dataset.action;
-
-        if (action === "add") {
+        if (actionButton.dataset.action === "add") {
           addToCart(product, true);
         }
 
@@ -1286,8 +1187,8 @@
       }
 
       /*
-       * Tap a beat card or artwork to play/pause.
-       * Buttons, links and form controls never trigger playback.
+       * Artwork/card taps toggle preview playback.
+       * Interactive controls do not trigger preview playback.
        */
       const card = target.closest(
         ".product-card[data-previewable='true']"
@@ -1304,9 +1205,7 @@
           card.dataset.category
         );
 
-        if (product) {
-          toggleCardPreview(product);
-        }
+        if (product) toggleCardPreview(product);
       }
     });
 
@@ -1329,10 +1228,7 @@
     }
 
     const cartToggle = document.getElementById("cartToggle");
-
-    if (cartToggle) {
-      cartToggle.addEventListener("click", openCart);
-    }
+    if (cartToggle) cartToggle.addEventListener("click", openCart);
 
     [
       "closeCart",
@@ -1340,42 +1236,20 @@
       "continueShopping"
     ].forEach(id => {
       const element = document.getElementById(id);
-
-      if (element) {
-        element.addEventListener("click", closeCart);
-      }
+      if (element) element.addEventListener("click", closeCart);
     });
 
     const overlay = document.getElementById("cartOverlay");
-
-    if (overlay) {
-      overlay.addEventListener("click", closeCart);
-    }
-
-    /*
-     * Attach the checkout listener after ensuring the button exists.
-     * The button is reused rather than creating a duplicate listener.
-     */
-    const checkout = ensureCheckoutButton();
-
-    if (checkout && !checkout.dataset.checkoutBound) {
-      checkout.addEventListener("click", checkoutCart);
-      checkout.dataset.checkoutBound = "true";
-    }
+    if (overlay) overlay.addEventListener("click", closeCart);
 
     const closePlayer = document.getElementById("closePlayer");
-
-    if (closePlayer) {
-      closePlayer.addEventListener("click", closePreview);
-    }
+    if (closePlayer) closePlayer.addEventListener("click", closePreview);
 
     const playerModal = document.getElementById("playerModal");
 
     if (playerModal) {
       playerModal.addEventListener("click", event => {
-        if (event.target === playerModal) {
-          closePreview();
-        }
+        if (event.target === playerModal) closePreview();
       });
     }
 
@@ -1390,9 +1264,7 @@
               updatePlayButton();
               updateCardPlayIcons();
             })
-            .catch(() => {
-              alert("Could not play this preview.");
-            });
+            .catch(() => alert("Could not play this preview."));
         } else {
           audio.pause();
         }
@@ -1410,9 +1282,7 @@
         const current = document.getElementById("currentTime");
         const progress = document.getElementById("progressBar");
 
-        if (current) {
-          current.textContent = formatTime(audio.currentTime);
-        }
+        if (current) current.textContent = formatTime(audio.currentTime);
 
         if (
           progress &&
@@ -1427,10 +1297,7 @@
 
       audio.addEventListener("loadedmetadata", () => {
         const duration = document.getElementById("duration");
-
-        if (duration) {
-          duration.textContent = formatTime(audio.duration);
-        }
+        if (duration) duration.textContent = formatTime(audio.duration);
       });
     }
 
@@ -1438,10 +1305,7 @@
 
     if (progress && audio) {
       progress.addEventListener("input", () => {
-        if (
-          Number.isFinite(audio.duration) &&
-          audio.duration > 0
-        ) {
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
           audio.currentTime =
             (Number(progress.value) / 100) * audio.duration;
         }
@@ -1463,10 +1327,7 @@
     }
 
     const year = document.getElementById("currentYear");
-
-    if (year) {
-      year.textContent = String(new Date().getFullYear());
-    }
+    if (year) year.textContent = String(new Date().getFullYear());
 
     document.addEventListener("keydown", event => {
       if (event.key === "Escape") {
@@ -1481,6 +1342,12 @@
     loadCart();
     ensureCheckoutButton();
     bindEvents();
-    await loadCatalogues();
+
+    try {
+      await loadCatalogues();
+    } catch (error) {
+      console.error("Store initialization failed:", error);
+      alert("The store could not finish loading. Refresh the page and try again.");
+    }
   });
 })();
