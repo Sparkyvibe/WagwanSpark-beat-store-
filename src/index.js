@@ -209,8 +209,30 @@ function productFileNameVariants(product) {
 function mediaKeyCandidates(product, column) {
   const candidates = [];
   if (product[column]) candidates.push(product[column]);
-  const names = productFileNameVariants(product);
   const category = product.category || "beats";
+  // Samples and Studio Tools are always uploaded through Admin, so their
+  // R2 keys are predictable. Only beats (and the legacy beat IDs) need the
+  // wide filename guessing below. This keeps a missing file from costing
+  // dozens of R2 lookups per request.
+  const isLegacyStyle = category === "beats" || Boolean(LEGACY_BEATS[product.id]);
+  if (!isLegacyStyle) {
+    const id = String(product.id || "");
+    if (column === "artwork_key") {
+      for (const ext of ["jpg", "png", "webp"]) {
+        candidates.push(`products/${category}/${id}.${ext}`);
+      }
+    }
+    if (column === "preview_key") {
+      for (const ext of ["mp3", "wav"]) {
+        candidates.push(`products/${category}/${id}-preview.${ext}`);
+      }
+    }
+    if (column === "zip_key") {
+      candidates.push(`products/${category}/${id}.zip`);
+    }
+    return [...new Set(candidates.filter(Boolean))];
+  }
+  const names = productFileNameVariants(product);
   if (column === "artwork_key") {
     for (const name of names) {
       for (const ext of ["jpg", "jpeg", "png", "webp"]) {
