@@ -469,6 +469,81 @@
     document.head.appendChild(style);
   }
 
+  const NAV_BREAKPOINT = 860;
+
+  // Opens or closes the mobile menu drawer (hamburger menu).
+  function setNavOpen(open) {
+    const navMenu = document.getElementById("navMenu");
+    const toggle = document.getElementById("navbarToggle");
+    const overlay = document.getElementById("navOverlay");
+
+    if (!navMenu) return;
+
+    navMenu.classList.toggle("active", open);
+    if (overlay) overlay.classList.toggle("active", open);
+    if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+
+    document.body.classList.toggle("nav-open", open);
+  }
+
+  // Adds the header, extra links, cart shortcut and dimmed backdrop that
+  // turn the nav links into a slide-in drawer on phones. These extras are
+  // hidden on desktop by styles.css, so the desktop navbar is unchanged.
+  function buildNavDrawer() {
+    const navMenu = document.getElementById("navMenu");
+
+    if (!navMenu || navMenu.dataset.drawerReady === "true") return;
+    navMenu.dataset.drawerReady = "true";
+
+    const head = document.createElement("div");
+    head.className = "nav-drawer-head";
+    head.innerHTML =
+      '<span class="nav-drawer-brand">WagwanSpark</span>' +
+      '<button type="button" class="nav-drawer-close" aria-label="Close menu">' +
+      '<i class="fas fa-times" aria-hidden="true"></i></button>';
+    navMenu.insertBefore(head, navMenu.firstChild);
+
+    const sub = document.createElement("div");
+    sub.className = "nav-drawer-sub";
+    sub.innerHTML =
+      '<a href="index.html#about">About</a>' +
+      '<a href="index.html#contact">Contact</a>';
+    navMenu.appendChild(sub);
+
+    const foot = document.createElement("div");
+    foot.className = "nav-drawer-foot";
+    foot.innerHTML =
+      '<button type="button" class="nav-drawer-cart">' +
+      '<i class="fas fa-shopping-cart" aria-hidden="true"></i> View cart</button>' +
+      "<p>Let the vibe be your guide.</p>";
+    navMenu.appendChild(foot);
+
+    // The backdrop lives inside the navbar so it stacks with the drawer.
+    const overlay = document.createElement("div");
+    overlay.className = "nav-overlay";
+    overlay.id = "navOverlay";
+    (navMenu.closest(".navbar") || document.body).appendChild(overlay);
+
+    overlay.addEventListener("click", () => setNavOpen(false));
+
+    head.querySelector(".nav-drawer-close")
+      .addEventListener("click", () => {
+        setNavOpen(false);
+        const toggle = document.getElementById("navbarToggle");
+        if (toggle) toggle.focus();
+      });
+
+    foot.querySelector(".nav-drawer-cart")
+      .addEventListener("click", () => {
+        setNavOpen(false);
+        openCart();
+      });
+
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > NAV_BREAKPOINT) setNavOpen(false);
+    });
+  }
+
   function configureNavigation() {
     $$(".navbar-logo").forEach(link => {
       link.href = "index.html";
@@ -511,13 +586,7 @@
 
         if (!target) return;
 
-        navMenu.classList.remove("active");
-
-        const toggle = document.getElementById("navbarToggle");
-
-        if (toggle) {
-          toggle.setAttribute("aria-expanded", "false");
-        }
+        setNavOpen(false);
       });
     }
   }
@@ -1628,12 +1697,7 @@
 
     if (navbarToggle && navMenu) {
       navbarToggle.addEventListener("click", () => {
-        navMenu.classList.toggle("active");
-
-        navbarToggle.setAttribute(
-          "aria-expanded",
-          navMenu.classList.contains("active") ? "true" : "false"
-        );
+        setNavOpen(!navMenu.classList.contains("active"));
       });
     }
 
@@ -1645,6 +1709,7 @@
 
     document.addEventListener("keydown", event => {
       if (event.key === "Escape") {
+        setNavOpen(false);
         closeCart();
         closePreview();
       }
@@ -1654,6 +1719,7 @@
   async function initializeStore() {
     try {
       installStoreInteractionStyles();
+      buildNavDrawer();
       configureNavigation();
       loadCart();
       bindEvents();
