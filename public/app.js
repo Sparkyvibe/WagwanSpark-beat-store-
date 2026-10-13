@@ -6,7 +6,7 @@
  * studio-tools.html = Studio Tools
  *
  * Separate catalogues, audio previews, shared cart and Paystack checkout.
- * Existing API routes and checkout payload are preserved.
+ * Preserves existing API routes, checkout payload and storefront styling.
  */
 (() => {
   "use strict";
@@ -20,18 +20,21 @@
   const CART_STORAGE_KEY = "wagwanspark-cart-v3";
   const CATEGORIES = ["beats", "samples", "studio-tools"];
   const REQUEST_TIMEOUT_MS = 12000;
+
   const CHECKOUT_LABEL =
     '<span>Proceed to Checkout</span> <i class="fas fa-lock" aria-hidden="true"></i>';
 
   function detectCurrentPage() {
-    const filename = window.location.pathname.split("/").pop().toLowerCase();
+    const path = window.location.pathname
+      .toLowerCase()
+      .replace(/\/+$/, "");
 
-    if (filename === "samples.html") return "samples";
+    if (/\/samples(?:\.html)?$/.test(path)) {
+      return "samples";
+    }
 
-    if (
-      filename === "studio-tools.html" ||
-      filename === "studio.html"
-    ) {
+    if (/\/studio-tools(?:\.html)?$/.test(path) ||
+        /\/studio(?:\.html)?$/.test(path)) {
       return "studio-tools";
     }
 
@@ -59,8 +62,11 @@
     checkoutBusy: false
   };
 
-  const $ = (selector, root = document) => root.querySelector(selector);
-  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const $ = (selector, root = document) =>
+    root.querySelector(selector);
+
+  const $$ = (selector, root = document) =>
+    [...root.querySelectorAll(selector)];
 
   const safeText = value => String(value ?? "");
 
@@ -96,11 +102,11 @@
 
     item.id = safeText(item.id || item.product_id).trim();
     item.title = safeText(item.title || item.name || item.id);
+
     item.category = safeText(
       item.category || requestedCategory
     ).trim().toLowerCase();
 
-    // Never silently reclassify a product returned by the API.
     if (!CATEGORIES.includes(item.category)) {
       item.category = requestedCategory;
     }
@@ -136,10 +142,12 @@
       item.status || "published"
     ).toLowerCase();
 
+    // Support both resolved API URLs and stored object keys.
     item.artwork = safeText(
       item.artwork ||
       item.artworkUrl ||
       item.artwork_url ||
+      item.artwork_key ||
       item.cover ||
       item.image ||
       item.image_url ||
@@ -153,6 +161,7 @@
       item.preview_audio_url ||
       item.previewUrl ||
       item.preview_url ||
+      item.preview_key ||
       item.audioPreview ||
       item.audio_preview ||
       item.preview ||
@@ -176,9 +185,7 @@
 
     try {
       const response = await fetch(url, {
-        headers: {
-          Accept: "application/json"
-        },
+        headers: { Accept: "application/json" },
         cache: "no-store",
         signal: controller.signal
       });
@@ -225,16 +232,11 @@
     if (Array.isArray(data.products)) return data.products;
     if (Array.isArray(data.beats)) return data.beats;
     if (Array.isArray(data.items)) return data.items;
-
     return [];
   }
 
   function installStoreInteractionStyles() {
-    if (
-      document.getElementById(
-        "wagwanspark-interaction-fixes"
-      )
-    ) {
+    if (document.getElementById("wagwanspark-interaction-fixes")) {
       return;
     }
 
@@ -467,10 +469,9 @@
       const label = link.textContent.trim().toLowerCase();
 
       if (label === "home" || label === "beats") {
-        link.href =
-          label === "home"
-            ? "index.html"
-            : "index.html#beats";
+        link.href = label === "home"
+          ? "index.html"
+          : "index.html#beats";
       } else if (label === "samples") {
         link.href = "samples.html";
       } else if (
@@ -495,23 +496,67 @@
 
     if (navMenu) {
       navMenu.addEventListener("click", event => {
-        const target =
-          event.target instanceof Element
-            ? event.target.closest("a")
-            : null;
+        const target = event.target instanceof Element
+          ? event.target.closest("a")
+          : null;
 
         if (!target) return;
 
         navMenu.classList.remove("active");
 
-        const toggle =
-          document.getElementById("navbarToggle");
+        const toggle = document.getElementById("navbarToggle");
 
         if (toggle) {
           toggle.setAttribute("aria-expanded", "false");
         }
       });
     }
+  }
+
+  function showMessage(gridId, message) {
+    const grid = document.getElementById(gridId);
+
+    if (grid) {
+      grid.innerHTML =
+        `<div class="catalogue-message"><p>${escapeHtml(message)}</p></div>`;
+    }
+  }
+
+  function productArtwork(product) {
+    const artwork = safeText(product.artwork).trim();
+
+    if (!artwork) {
+      return `/api/media/${encodeURIComponent(product.id)}/artwork`;
+    }
+
+    // API media URLs are already usable. Resolve stored object keys
+    // through the existing media endpoint instead of using raw R2 keys.
+    if (
+      !/^https?:\/\//i.test(artwork) &&
+      !artwork.startsWith("/") &&
+      /\.(png|jpe?g|webp|gif|avif)$/i.test(artwork)
+    ) {
+      return `/api/media/${encodeURIComponent(product.id)}/artwork`;
+    }
+
+    return artwork;
+  }
+
+  function productPreview(product) {
+    const preview = safeText(product.previewAudio).trim();
+
+    if (!preview) return "";
+
+    // A stored preview key is not a public URL. Use the existing API
+    // media route for products whose API response supplies preview_key.
+    if (
+      !/^https?:\/\//i.test(preview) &&
+      !preview.startsWith("/")
+    ) {
+      return `/api/media/${encodeURIComponent(product.id)}/preview`;
+    }
+
+    return preview;
   }
 
   async function loadOneCatalogue(category, url) {
@@ -521,11 +566,8 @@
 
       const normalized = rawItems
         .map(item => normalizeProduct(item, category))
-        .filter(
-          item => item.id && item.status === "published"
-        );
+        .filter(item => item.id && item.status === "published");
 
-      // Only products belonging to the requested category are rendered.
       state.products[category] = normalized.filter(item => {
         if (item.category !== category) {
           console.warn(
@@ -540,60 +582,39 @@
 
       state.catalogueErrors[category] = "";
     } catch (error) {
-      console.error(
-        `${category} catalogue could not load:`,
-        error
-      );
+      console.error(`${category} catalogue could not load:`, error);
 
       state.products[category] = [];
-
       state.catalogueErrors[category] =
         error?.message || "Catalogue could not load.";
     }
 
-    if (CURRENT_PAGE === category) {
-      renderAll();
-    }
+    renderAll();
   }
 
   async function loadCatalogues() {
-    const jobs = [
+    // Each catalogue handles its own errors, so one failed request
+    // cannot prevent another catalogue from rendering.
+    await Promise.all([
       loadOneCatalogue("beats", API.beats),
-      loadOneCatalogue(
-        "samples",
-        `${API.products}?category=samples`
-      ),
+      loadOneCatalogue("samples", `${API.products}?category=samples`),
       loadOneCatalogue(
         "studio-tools",
         `${API.products}?category=studio-tools`
       )
-    ];
+    ]);
 
-    await Promise.all(jobs);
     renderAll();
-  }
-
-  function showMessage(gridId, message) {
-    const grid = document.getElementById(gridId);
-
-    if (grid) {
-      grid.innerHTML =
-        `<div class="catalogue-message"><p>${escapeHtml(message)}</p></div>`;
-    }
-  }
-
-  function productArtwork(product) {
-    return product.artwork ||
-      `/api/media/${encodeURIComponent(product.id)}/artwork`;
   }
 
   function productCard(product, category = product.category) {
     const key = cartKey(product);
     const inCart = state.cart.includes(key);
+    const previewAudio = productPreview(product);
 
     const playable =
       (category === "beats" || category === "samples") &&
-      Boolean(product.previewAudio);
+      Boolean(previewAudio);
 
     const metadata = [];
 
@@ -704,18 +725,13 @@
 
   function renderBeats() {
     const grid = document.getElementById("beatsGrid");
-
     if (!grid) return;
 
-    if (
-      state.catalogueErrors.beats &&
-      !state.products.beats.length
-    ) {
+    if (state.catalogueErrors.beats && !state.products.beats.length) {
       showMessage(
         "beatsGrid",
         `Beats could not load: ${state.catalogueErrors.beats}`
       );
-
       return;
     }
 
@@ -729,8 +745,7 @@
       const searchable =
         `${product.title} ${product.genre} ${product.description} ${product.musical_key}`.toLowerCase();
 
-      return matchesGenre &&
-        (!query || searchable.includes(query));
+      return matchesGenre && (!query || searchable.includes(query));
     });
 
     grid.innerHTML = items.length
@@ -741,18 +756,14 @@
             : "No beats are currently published."
         }</p></div>`;
 
-    const genreFilter =
-      document.getElementById("genreFilter");
+    const genreFilter = document.getElementById("genreFilter");
 
     if (genreFilter) {
-      const current =
-        genreFilter.value || state.activeFilter;
+      const current = genreFilter.value || state.activeFilter;
 
       const genres = [
         ...new Set(
-          state.products.beats
-            .map(item => item.genre)
-            .filter(Boolean)
+          state.products.beats.map(item => item.genre).filter(Boolean)
         )
       ].sort();
 
@@ -765,34 +776,21 @@
       genreFilter.value = [
         "all",
         ...genres.map(genre => genre.toLowerCase())
-      ].includes(current)
-        ? current
-        : "all";
+      ].includes(current) ? current : "all";
     }
 
-    const pagination =
-      document.getElementById("pagination");
-
-    if (pagination) {
-      pagination.innerHTML = "";
-    }
+    const pagination = document.getElementById("pagination");
+    if (pagination) pagination.innerHTML = "";
   }
 
   function renderProductCategory(category) {
-    if (
-      category !== "samples" &&
-      category !== "studio-tools"
-    ) {
-      return;
-    }
+    if (category !== "samples" && category !== "studio-tools") return;
 
-    const gridId =
-      category === "samples"
-        ? "samplesGrid"
-        : "studioToolsGrid";
+    const gridId = category === "samples"
+      ? "samplesGrid"
+      : "studioToolsGrid";
 
     const grid = document.getElementById(gridId);
-
     if (!grid) return;
 
     if (
@@ -803,20 +801,17 @@
         gridId,
         `${categoryLabel(category)} catalogue could not load: ${state.catalogueErrors[category]}`
       );
-
       return;
     }
 
     const query = state.categorySearch.trim().toLowerCase();
 
-    const items = (state.products[category] || []).filter(
-      product => {
-        const searchable =
-          `${product.title} ${product.genre} ${product.description} ${product.musical_key}`.toLowerCase();
+    const items = state.products[category].filter(product => {
+      const searchable =
+        `${product.title} ${product.genre} ${product.description} ${product.musical_key}`.toLowerCase();
 
-        return !query || searchable.includes(query);
-      }
-    );
+      return !query || searchable.includes(query);
+    });
 
     grid.innerHTML = items.length
       ? items.map(item => productCard(item, category)).join("")
@@ -837,10 +832,7 @@
 
   function saveCart() {
     try {
-      localStorage.setItem(
-        CART_STORAGE_KEY,
-        JSON.stringify(state.cart)
-      );
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.cart));
     } catch (error) {
       console.warn("Cart could not be saved.", error);
     }
@@ -869,10 +861,7 @@
       all.map(product => [cartKey(product), product])
     );
 
-    state.cart = state.cart.filter(
-      key => byKey.has(key)
-    );
-
+    state.cart = state.cart.filter(key => byKey.has(key));
     return state.cart.map(key => byKey.get(key));
   }
 
@@ -880,45 +869,32 @@
     if (!product) return;
 
     const key = cartKey(product);
-
-    if (!state.cart.includes(key)) {
-      state.cart.push(key);
-    }
+    if (!state.cart.includes(key)) state.cart.push(key);
 
     saveCart();
     renderAll();
 
-    if (openDrawer) {
-      openCart();
-    }
+    if (openDrawer) openCart();
   }
 
   function removeFromCart(key) {
-    state.cart = state.cart.filter(
-      item => item !== key
-    );
-
+    state.cart = state.cart.filter(item => item !== key);
     saveCart();
     renderAll();
   }
 
   function ensureCheckoutButton() {
-    const summary =
-      document.getElementById("cartSummary");
-
+    const summary = document.getElementById("cartSummary");
     if (!summary) return null;
 
-    let button =
-      document.getElementById("checkoutBtn");
+    let button = document.getElementById("checkoutBtn");
 
     if (!button) {
       button = document.createElement("button");
       button.id = "checkoutBtn";
       button.type = "button";
-      button.className =
-        "btn btn-primary cart-checkout-btn";
+      button.className = "btn btn-primary cart-checkout-btn";
       button.innerHTML = CHECKOUT_LABEL;
-
       summary.appendChild(button);
     }
 
@@ -932,64 +908,34 @@
   function renderCart() {
     const products = getCartProducts();
     const count = products.length;
+    const total = products.reduce((sum, item) => sum + item.price, 0);
 
-    const total = products.reduce(
-      (sum, item) => sum + item.price,
-      0
-    );
+    const cartCount = document.getElementById("cartCount");
+    if (cartCount) cartCount.textContent = String(count);
 
-    const cartCount =
-      document.getElementById("cartCount");
-
-    if (cartCount) {
-      cartCount.textContent = String(count);
-    }
-
-    const itemLabel =
-      document.getElementById("cartItemLabel");
-
+    const itemLabel = document.getElementById("cartItemLabel");
     if (itemLabel) {
-      itemLabel.textContent =
-        `${count} ${count === 1 ? "item" : "items"}`;
+      itemLabel.textContent = `${count} ${count === 1 ? "item" : "items"}`;
     }
 
-    const summaryCount =
-      document.getElementById("cartSummaryCount");
+    const summaryCount = document.getElementById("cartSummaryCount");
+    if (summaryCount) summaryCount.textContent = String(count);
 
-    if (summaryCount) {
-      summaryCount.textContent = String(count);
-    }
+    const cartTotal = document.getElementById("cartTotal");
+    if (cartTotal) cartTotal.textContent = money(total);
 
-    const cartTotal =
-      document.getElementById("cartTotal");
+    const cartEmpty = document.getElementById("cartEmpty");
+    if (cartEmpty) cartEmpty.style.display = count ? "none" : "flex";
 
-    if (cartTotal) {
-      cartTotal.textContent = money(total);
-    }
-
-    const cartEmpty =
-      document.getElementById("cartEmpty");
-
-    if (cartEmpty) {
-      cartEmpty.style.display = count ? "none" : "flex";
-    }
-
-    const cartSummary =
-      document.getElementById("cartSummary");
+    const cartSummary = document.getElementById("cartSummary");
 
     if (cartSummary) {
       cartSummary.hidden = count === 0;
-      cartSummary.style.display =
-        count ? "block" : "none";
-
-      cartSummary.setAttribute(
-        "aria-hidden",
-        count ? "false" : "true"
-      );
+      cartSummary.style.display = count ? "block" : "none";
+      cartSummary.setAttribute("aria-hidden", count ? "false" : "true");
     }
 
-    const cartItems =
-      document.getElementById("cartItems");
+    const cartItems = document.getElementById("cartItems");
 
     if (cartItems) {
       cartItems.innerHTML = products.map(product => `
@@ -1022,12 +968,9 @@
     const checkoutButton = ensureCheckoutButton();
 
     if (checkoutButton) {
-      checkoutButton.disabled =
-        count === 0 || state.checkoutBusy;
-
+      checkoutButton.disabled = count === 0 || state.checkoutBusy;
       checkoutButton.style.display = "flex";
       checkoutButton.style.visibility = "visible";
-
       checkoutButton.innerHTML = state.checkoutBusy
         ? '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Connecting to Paystack...'
         : CHECKOUT_LABEL;
@@ -1048,10 +991,9 @@
       );
 
       if (product) {
-        button.innerHTML =
-          state.cart.includes(cartKey(product))
-            ? '<i class="fas fa-check" aria-hidden="true"></i> Added to Cart'
-            : '<i class="fas fa-cart-plus" aria-hidden="true"></i> Add to Cart';
+        button.innerHTML = state.cart.includes(cartKey(product))
+          ? '<i class="fas fa-check" aria-hidden="true"></i> Added to Cart'
+          : '<i class="fas fa-cart-plus" aria-hidden="true"></i> Add to Cart';
       }
     });
 
@@ -1061,11 +1003,8 @@
   function openCart() {
     renderCart();
 
-    const drawer =
-      document.getElementById("cartDrawer");
-
-    const overlay =
-      document.getElementById("cartOverlay");
+    const drawer = document.getElementById("cartDrawer");
+    const overlay = document.getElementById("cartOverlay");
 
     if (drawer) {
       drawer.classList.add("active", "open");
@@ -1077,22 +1016,15 @@
       overlay.setAttribute("aria-hidden", "false");
     }
 
-    const toggle =
-      document.getElementById("cartToggle");
-
-    if (toggle) {
-      toggle.setAttribute("aria-expanded", "true");
-    }
+    const toggle = document.getElementById("cartToggle");
+    if (toggle) toggle.setAttribute("aria-expanded", "true");
 
     document.body.classList.add("cart-open");
   }
 
   function closeCart() {
-    const drawer =
-      document.getElementById("cartDrawer");
-
-    const overlay =
-      document.getElementById("cartOverlay");
+    const drawer = document.getElementById("cartDrawer");
+    const overlay = document.getElementById("cartOverlay");
 
     if (drawer) {
       drawer.classList.remove("active", "open");
@@ -1104,72 +1036,45 @@
       overlay.setAttribute("aria-hidden", "true");
     }
 
-    const toggle =
-      document.getElementById("cartToggle");
-
-    if (toggle) {
-      toggle.setAttribute("aria-expanded", "false");
-    }
+    const toggle = document.getElementById("cartToggle");
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
 
     document.body.classList.remove("cart-open");
   }
 
   function openPreview(product) {
-    if (!product || !product.previewAudio) {
-      alert(
-        "No preview audio has been uploaded for this product yet."
-      );
+    const previewAudio = product ? productPreview(product) : "";
 
+    if (!product || !previewAudio) {
+      alert("No preview audio has been uploaded for this product yet.");
       return;
     }
 
-    const modal =
-      document.getElementById("playerModal");
-
-    const audio =
-      document.getElementById("audioPlayer");
+    const modal = document.getElementById("playerModal");
+    const audio = document.getElementById("audioPlayer");
 
     if (!modal || !audio) {
-      window.open(
-        product.previewAudio,
-        "_blank",
-        "noopener,noreferrer"
-      );
-
+      window.open(previewAudio, "_blank", "noopener,noreferrer");
       return;
     }
 
-    const title =
-      document.getElementById("playerTitle");
+    const title = document.getElementById("playerTitle");
+    const genre = document.getElementById("playerGenre");
+    const image = document.getElementById("playerImage");
+    const artwork = document.getElementById("playerArtwork");
 
-    const genre =
-      document.getElementById("playerGenre");
-
-    const image =
-      document.getElementById("playerImage");
-
-    const artwork =
-      document.getElementById("playerArtwork");
-
-    if (title) {
-      title.textContent = product.title;
-    }
+    if (title) title.textContent = product.title;
 
     if (genre) {
       genre.textContent =
         `${categoryLabel(product.category)}${product.genre ? ` · ${product.genre}` : ""}`;
     }
 
-    if (image) {
-      image.src = productArtwork(product);
-    }
-
-    if (artwork) {
-      artwork.classList.remove("artwork-placeholder");
-    }
+    if (image) image.src = productArtwork(product);
+    if (artwork) artwork.classList.remove("artwork-placeholder");
 
     audio.pause();
-    audio.src = product.previewAudio;
+    audio.src = previewAudio;
     audio.load();
 
     state.activePreview = product;
@@ -1185,11 +1090,7 @@
         updateCardPlayIcons();
       })
       .catch(error => {
-        console.error(
-          "Preview playback failed:",
-          error
-        );
-
+        console.error("Preview playback failed:", error);
         updatePlayButton();
         updateCardPlayIcons();
 
@@ -1202,16 +1103,12 @@
   function toggleCardPreview(product) {
     if (!product) return;
 
-    if (!product.previewAudio) {
-      alert(
-        "No preview audio has been uploaded for this product yet."
-      );
-
+    if (!productPreview(product)) {
+      alert("No preview audio has been uploaded for this product yet.");
       return;
     }
 
-    const audio =
-      document.getElementById("audioPlayer");
+    const audio = document.getElementById("audioPlayer");
 
     const sameProduct = Boolean(
       state.activePreview &&
@@ -1227,14 +1124,8 @@
             updateCardPlayIcons();
           })
           .catch(error => {
-            console.error(
-              "Preview playback failed:",
-              error
-            );
-
-            alert(
-              "Could not play this preview. Check the uploaded audio file."
-            );
+            console.error("Preview playback failed:", error);
+            alert("Could not play this preview. Check the uploaded audio file.");
           });
       } else {
         audio.pause();
@@ -1242,7 +1133,6 @@
 
       updatePlayButton();
       updateCardPlayIcons();
-
       return;
     }
 
@@ -1250,11 +1140,8 @@
   }
 
   function closePreview() {
-    const modal =
-      document.getElementById("playerModal");
-
-    const audio =
-      document.getElementById("audioPlayer");
+    const modal = document.getElementById("playerModal");
+    const audio = document.getElementById("audioPlayer");
 
     if (audio) {
       audio.pause();
@@ -1268,14 +1155,12 @@
     }
 
     state.activePreview = null;
-
     updatePlayButton();
     updateCardPlayIcons();
   }
 
   function updateCardPlayIcons() {
-    const audio =
-      document.getElementById("audioPlayer");
+    const audio = document.getElementById("audioPlayer");
 
     $$(".product-card-playable").forEach(card => {
       const isActive = Boolean(
@@ -1284,34 +1169,21 @@
         state.activePreview.category === card.dataset.category
       );
 
-      const isPlaying = Boolean(
-        isActive && audio && !audio.paused
-      );
+      const isPlaying = Boolean(isActive && audio && !audio.paused);
 
-      card.classList.toggle(
-        "is-preview-playing",
-        isPlaying
-      );
+      card.classList.toggle("is-preview-playing", isPlaying);
 
-      const icon = $(
-        ".artwork-play-icon i",
-        card
-      );
+      const icon = $(".artwork-play-icon i", card);
 
       if (icon) {
-        icon.className = isPlaying
-          ? "fas fa-pause"
-          : "fas fa-play";
+        icon.className = isPlaying ? "fas fa-pause" : "fas fa-play";
       }
     });
   }
 
   function updatePlayButton() {
-    const audio =
-      document.getElementById("audioPlayer");
-
-    const button =
-      document.getElementById("playPauseBtn");
+    const audio = document.getElementById("audioPlayer");
+    const button = document.getElementById("playPauseBtn");
 
     if (audio && button) {
       button.innerHTML = audio.paused
@@ -1320,9 +1192,7 @@
 
       button.setAttribute(
         "aria-label",
-        audio.paused
-          ? "Play preview"
-          : "Pause preview"
+        audio.paused ? "Play preview" : "Pause preview"
       );
     }
 
@@ -1330,14 +1200,9 @@
   }
 
   function formatTime(seconds) {
-    if (!Number.isFinite(seconds)) {
-      return "0:00";
-    }
+    if (!Number.isFinite(seconds)) return "0:00";
 
-    const value = Math.max(
-      0,
-      Math.floor(seconds)
-    );
+    const value = Math.max(0, Math.floor(seconds));
 
     return `${Math.floor(value / 60)}:${String(
       value % 60
@@ -1350,12 +1215,8 @@
     const products = getCartProducts();
 
     if (!products.length) {
-      alert(
-        "Your cart is empty. Add a product before checkout."
-      );
-
+      alert("Your cart is empty. Add a product before checkout.");
       renderCart();
-
       return;
     }
 
@@ -1368,10 +1229,7 @@
     const cleanedEmail = email.trim();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanedEmail)) {
-      alert(
-        "Enter a valid email address and try again."
-      );
-
+      alert("Enter a valid email address and try again.");
       return;
     }
 
@@ -1392,10 +1250,7 @@
       productItems
     };
 
-    if (
-      beatIds.length === 1 &&
-      products.length === 1
-    ) {
+    if (beatIds.length === 1 && products.length === 1) {
       payload.beatId = beatIds[0];
     }
 
@@ -1434,15 +1289,10 @@
         );
       }
 
-      window.location.href =
-        result.data.authorization_url;
+      window.location.href = result.data.authorization_url;
     } catch (error) {
       console.error("Checkout error:", error);
-
-      alert(
-        error.message ||
-        "Checkout failed. Please try again."
-      );
+      alert(error.message || "Checkout failed. Please try again.");
     } finally {
       state.checkoutBusy = false;
       renderCart();
@@ -1450,7 +1300,12 @@
   }
 
   function renderAll() {
-    if (CURRENT_PAGE === "beats") {
+    // Prefer the actual page grid, with URL detection as a fallback.
+    if (document.getElementById("samplesGrid")) {
+      renderProductCategory("samples");
+    } else if (document.getElementById("studioToolsGrid")) {
+      renderProductCategory("studio-tools");
+    } else if (document.getElementById("beatsGrid")) {
       renderBeats();
     } else if (CURRENT_PAGE === "samples") {
       renderProductCategory("samples");
@@ -1463,15 +1318,13 @@
 
   function bindEvents() {
     document.addEventListener("click", event => {
-      const target =
-        event.target instanceof Element
-          ? event.target
-          : event.target?.parentElement;
+      const target = event.target instanceof Element
+        ? event.target
+        : event.target?.parentElement;
 
       if (!target) return;
 
-      const actionButton =
-        target.closest("[data-action]");
+      const actionButton = target.closest("[data-action]");
 
       if (actionButton) {
         const product = findProduct(
@@ -1479,24 +1332,17 @@
           actionButton.dataset.category
         );
 
-        if (
-          product &&
-          actionButton.dataset.action === "add"
-        ) {
+        if (product && actionButton.dataset.action === "add") {
           addToCart(product, true);
         }
 
         return;
       }
 
-      const removeButton =
-        target.closest("[data-remove]");
+      const removeButton = target.closest("[data-remove]");
 
       if (removeButton) {
-        removeFromCart(
-          removeButton.dataset.remove
-        );
-
+        removeFromCart(removeButton.dataset.remove);
         return;
       }
 
@@ -1515,14 +1361,11 @@
           card.dataset.category
         );
 
-        if (product) {
-          toggleCardPreview(product);
-        }
+        if (product) toggleCardPreview(product);
       }
     });
 
-    const searchInput =
-      document.getElementById("searchInput");
+    const searchInput = document.getElementById("searchInput");
 
     if (searchInput) {
       searchInput.addEventListener("input", event => {
@@ -1536,37 +1379,25 @@
       document.getElementById("studioToolsSearch");
 
     if (categorySearchInput) {
-      categorySearchInput.addEventListener(
-        "input",
-        event => {
-          state.categorySearch =
-            event.target.value || "";
-
-          renderProductCategory(CURRENT_PAGE);
-        }
-      );
+      categorySearchInput.addEventListener("input", event => {
+        state.categorySearch = event.target.value || "";
+        renderAll();
+      });
     }
 
-    const genreFilter =
-      document.getElementById("genreFilter");
+    const genreFilter = document.getElementById("genreFilter");
 
     if (genreFilter) {
       genreFilter.addEventListener("change", event => {
-        state.activeFilter =
-          event.target.value || "all";
-
+        state.activeFilter = event.target.value || "all";
         renderBeats();
       });
     }
 
-    const cartToggle =
-      document.getElementById("cartToggle");
+    const cartToggle = document.getElementById("cartToggle");
 
     if (cartToggle) {
-      cartToggle.addEventListener(
-        "click",
-        openCart
-      );
+      cartToggle.addEventListener("click", openCart);
     }
 
     [
@@ -1574,76 +1405,44 @@
       "cartContinueShopping",
       "continueShopping"
     ].forEach(id => {
-      const element =
-        document.getElementById(id);
+      const element = document.getElementById(id);
 
-      if (element) {
-        element.addEventListener(
-          "click",
-          closeCart
-        );
-      }
+      if (element) element.addEventListener("click", closeCart);
     });
 
-    const checkoutButton =
-      ensureCheckoutButton();
+    const checkoutButton = ensureCheckoutButton();
 
     if (checkoutButton) {
-      checkoutButton.addEventListener(
-        "click",
-        checkoutCart
-      );
+      checkoutButton.addEventListener("click", checkoutCart);
     }
 
-    const overlay =
-      document.getElementById("cartOverlay");
+    const overlay = document.getElementById("cartOverlay");
 
-    if (overlay) {
-      overlay.addEventListener(
-        "click",
-        closeCart
-      );
-    }
+    if (overlay) overlay.addEventListener("click", closeCart);
 
-    const closePlayer =
-      document.getElementById("closePlayer");
+    const closePlayer = document.getElementById("closePlayer");
 
     if (closePlayer) {
-      closePlayer.addEventListener(
-        "click",
-        closePreview
-      );
+      closePlayer.addEventListener("click", closePreview);
     }
 
     const closePlayerBackdrop =
       document.getElementById("closePlayerBackdrop");
 
     if (closePlayerBackdrop) {
-      closePlayerBackdrop.addEventListener(
-        "click",
-        closePreview
-      );
+      closePlayerBackdrop.addEventListener("click", closePreview);
     }
 
-    const playerModal =
-      document.getElementById("playerModal");
+    const playerModal = document.getElementById("playerModal");
 
     if (playerModal) {
-      playerModal.addEventListener(
-        "click",
-        event => {
-          if (event.target === playerModal) {
-            closePreview();
-          }
-        }
-      );
+      playerModal.addEventListener("click", event => {
+        if (event.target === playerModal) closePreview();
+      });
     }
 
-    const audio =
-      document.getElementById("audioPlayer");
-
-    const playPause =
-      document.getElementById("playPauseBtn");
+    const audio = document.getElementById("audioPlayer");
+    const playPause = document.getElementById("playPauseBtn");
 
     if (playPause && audio) {
       playPause.addEventListener("click", () => {
@@ -1654,14 +1453,8 @@
               updateCardPlayIcons();
             })
             .catch(error => {
-              console.error(
-                "Preview playback failed:",
-                error
-              );
-
-              alert(
-                "Could not play this preview. Check the uploaded audio file."
-              );
+              console.error("Preview playback failed:", error);
+              alert("Could not play this preview. Check the uploaded audio file.");
             });
         } else {
           audio.pause();
@@ -1672,74 +1465,46 @@
     }
 
     if (audio) {
-      audio.addEventListener(
-        "play",
-        updatePlayButton
-      );
+      audio.addEventListener("play", updatePlayButton);
+      audio.addEventListener("pause", updatePlayButton);
+      audio.addEventListener("ended", updatePlayButton);
 
-      audio.addEventListener(
-        "pause",
-        updatePlayButton
-      );
+      audio.addEventListener("timeupdate", () => {
+        const current = document.getElementById("currentTime");
+        const progress = document.getElementById("progressBar");
 
-      audio.addEventListener(
-        "ended",
-        updatePlayButton
-      );
-
-      audio.addEventListener(
-        "timeupdate",
-        () => {
-          const current =
-            document.getElementById("currentTime");
-
-          const progress =
-            document.getElementById("progressBar");
-
-          if (current) {
-            current.textContent =
-              formatTime(audio.currentTime);
-          }
-
-          if (
-            progress &&
-            Number.isFinite(audio.duration) &&
-            audio.duration > 0
-          ) {
-            progress.value = String(
-              (audio.currentTime / audio.duration) * 100
-            );
-          }
+        if (current) {
+          current.textContent = formatTime(audio.currentTime);
         }
-      );
 
-      audio.addEventListener(
-        "loadedmetadata",
-        () => {
-          const duration =
-            document.getElementById("duration");
-
-          if (duration) {
-            duration.textContent =
-              formatTime(audio.duration);
-          }
+        if (
+          progress &&
+          Number.isFinite(audio.duration) &&
+          audio.duration > 0
+        ) {
+          progress.value = String(
+            (audio.currentTime / audio.duration) * 100
+          );
         }
-      );
+      });
+
+      audio.addEventListener("loadedmetadata", () => {
+        const duration = document.getElementById("duration");
+
+        if (duration) {
+          duration.textContent = formatTime(audio.duration);
+        }
+      });
 
       audio.addEventListener("error", () => {
         if (state.activePreview) {
-          console.error(
-            "Audio element error:",
-            audio.error
-          );
-
+          console.error("Audio element error:", audio.error);
           updatePlayButton();
         }
       });
     }
 
-    const progress =
-      document.getElementById("progressBar");
+    const progress = document.getElementById("progressBar");
 
     if (progress && audio) {
       progress.addEventListener("input", () => {
@@ -1748,75 +1513,85 @@
           audio.duration > 0
         ) {
           audio.currentTime =
-            (Number(progress.value) / 100) *
-            audio.duration;
+            (Number(progress.value) / 100) * audio.duration;
         }
       });
     }
 
-    const navbarToggle =
-      document.getElementById("navbarToggle");
-
-    const navMenu =
-      document.getElementById("navMenu");
+    const navbarToggle = document.getElementById("navbarToggle");
+    const navMenu = document.getElementById("navMenu");
 
     if (navbarToggle && navMenu) {
-      navbarToggle.addEventListener(
-        "click",
-        () => {
-          navMenu.classList.toggle("active");
+      navbarToggle.addEventListener("click", () => {
+        navMenu.classList.toggle("active");
 
-          navbarToggle.setAttribute(
-            "aria-expanded",
-            navMenu.classList.contains("active")
-              ? "true"
-              : "false"
-          );
-        }
-      );
+        navbarToggle.setAttribute(
+          "aria-expanded",
+          navMenu.classList.contains("active") ? "true" : "false"
+        );
+      });
     }
 
-    const year =
-      document.getElementById("currentYear");
+    const year = document.getElementById("currentYear");
 
     if (year) {
-      year.textContent =
-        String(new Date().getFullYear());
+      year.textContent = String(new Date().getFullYear());
     }
 
-    document.addEventListener(
-      "keydown",
-      event => {
-        if (event.key === "Escape") {
-          closeCart();
-          closePreview();
-        }
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        closeCart();
+        closePreview();
       }
-    );
+    });
   }
 
-  /*
-   * Corrected initialization:
-   * If this script runs before DOMContentLoaded, wait for the event.
-   * If the event has already fired, initialize immediately.
-   */
   async function initializeStore() {
-    installStoreInteractionStyles();
-    configureNavigation();
-    loadCart();
-    bindEvents();
+    try {
+      installStoreInteractionStyles();
+      configureNavigation();
+      loadCart();
+      bindEvents();
 
-    const summary =
-      document.getElementById("cartSummary");
+      const summary = document.getElementById("cartSummary");
 
-    if (summary) {
-      summary.hidden = true;
-      summary.style.display = "none";
+      if (summary) {
+        summary.hidden = true;
+        summary.style.display = "none";
+      }
+
+      renderCart();
+
+      // Render a visible loading state immediately on category pages.
+      if (document.getElementById("samplesGrid")) {
+        showMessage("samplesGrid", "Loading sample packs...");
+      } else if (document.getElementById("studioToolsGrid")) {
+        showMessage("studioToolsGrid", "Loading Studio Tools...");
+      } else if (document.getElementById("beatsGrid")) {
+        showMessage("beatsGrid", "Loading beats...");
+      }
+
+      await loadCatalogues();
+    } catch (error) {
+      console.error("Store initialization failed:", error);
+
+      if (document.getElementById("samplesGrid")) {
+        showMessage(
+          "samplesGrid",
+          "The sample catalogue could not initialize. Refresh the page and try again."
+        );
+      } else if (document.getElementById("studioToolsGrid")) {
+        showMessage(
+          "studioToolsGrid",
+          "The Studio Tools catalogue could not initialize. Refresh the page and try again."
+        );
+      } else if (document.getElementById("beatsGrid")) {
+        showMessage(
+          "beatsGrid",
+          "The beat catalogue could not initialize. Refresh the page and try again."
+        );
+      }
     }
-
-    renderCart();
-
-    await loadCatalogues();
   }
 
   if (document.readyState === "loading") {
