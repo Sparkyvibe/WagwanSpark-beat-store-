@@ -1,0 +1,73 @@
+# Base44 development environment for the WagwanSpark beat store.
+#
+# The app is a Cloudflare Worker (src/index.js) that serves the static store
+# from public/ (ASSETS binding) plus an API backed by D1 (DB) and R2
+# (BEATS_BUCKET). `wrangler dev` runs that Worker locally on port 3000 with the
+# repository bind-mounted, so source edits are live — no image rebuild needed.
+services:
+  # One-shot: creates the D1 schema and the demo catalogue + media, then exits.
+  setup:
+    build:
+      context: .
+      dockerfile: Dockerfile.base44
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - wrangler-state:/data
+    env_file:
+      - ./.env.base44-defaults # development defaults (lowest precedence)
+      - /run/base44/app.env # platform-managed secrets (highest precedence)
+    command: ["sh", "-ec", "sh ./.base44/dev-setup.sh"]
+    restart: "no"
+
+  # The store: Worker + static assets on http://localhost:3000
+  store:
+    build:
+      context: .
+      dockerfile: Dockerfile.base44
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/app
+      - wrangler-state:/data
+    env_file:
+      - ./.env.base44-defaults # development defaults (lowest precedence)
+      - /run/base44/app.env # platform-managed secrets (highest precedence)
+    environment:
+      # Sandbox marker supplied by the platform; it is only set in the sandbox.
+      - BASE44_PREVIEW_MODE
+      - BASE44_PUBLIC_HOST_SUFFIX
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    command:
+      - sh
+      - -ec
+      - |
+        # Wrangler reads Worker secrets/bindings from .dev.vars, not from the
+        # process environment, so bridge the container environment into it
+        # (the file is gitignored). Values must be single-line.
+        # ($$ escapes Compose' own variable interpolation)
+        for name in ADMIN_PASSWORD PAYSTACK_SECRET_KEY EMAIL_SCRIPT_URL \
+                    EMAIL_SHARED_SECRET BASE44_PREVIEW_MODE \
+                    BASE44_PUBLIC_HOST_SUFFIX; do
+          value=$$(printenv "$$name" || true)
+          if [ -n "$$value" ]; then printf '%s=%s\n' "$$name" "$$value"; fi
+        done > /app/.dev.vars
+        exec wrangler dev --ip 0.0.0.0 --port 3000 --persist-to /data/state
+    healthcheck:
+      # Checks both the storefront (static assets) and the API (D1 read).
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const urls=['http://127.0.0.1:3000/','http://127.0.0.1:3000/api/beats'];Promise.all(urls.map(u=>fetch(u))).then(rs=>{const bad=rs.filter(r=>!r.ok).map(r=>r.url+' -> '+r.status);if(bad.length){console.log('store unhealthy: '+bad.join(', '));process.exit(1)}process.exit(0)}).catch(e=>{console.log('store unhealthy: '+e.message);process.exit(1)})\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    restart: on-failure
+
+volumes:
+  wrangler-state: # local D1 + R2 state (survives container restarts)

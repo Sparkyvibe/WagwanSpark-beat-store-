@@ -1,0 +1,27 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "PAYSTACK_SECRET_KEY",
+      "description": "Paystack secret key (Paystack dashboard -> Settings -> API Keys & Webhooks). A test key (sk_test_...) is enough to exercise checkout in the sandbox. Without it /api/create-payment, /api/verify-payment, /api/download and the webhook stay disabled (they return a clear 'not configured' error).",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "ADMIN_PASSWORD",
+      "description": "Password for the admin panel at /admin. Leave unset to use the local development default 'wagwanspark-admin' from .env.base44-defaults.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "EMAIL_SCRIPT_URL",
+      "description": "Google Apps Script web-app URL (https://script.google.com/macros/s/.../exec) used to email download links after a verified purchase. Optional — only the purchase-email step needs it.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "EMAIL_SHARED_SECRET",
+      "description": "Shared secret that the Google Apps Script email endpoint checks against. Optional, used together with EMAIL_SCRIPT_URL.",
+      "requiredAtBoot": false
+    }
+  ]
+}

@@ -8,6 +8,8 @@
     <meta name="theme-color" content="#101010">
 
     <link rel="stylesheet" href="styles.css?v=2">
+    <!-- Shared cart drawer styling (same file samples.html and studio-tools.html load) -->
+    <link rel="stylesheet" href="cart.css?v=1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
@@ -268,23 +270,20 @@
     <!-- CART OVERLAY -->
     <div class="cart-overlay" id="cartOverlay" aria-hidden="true"></div>
 
-    <!-- CART DRAWER -->
+    <!-- CART DRAWER (same markup pattern as samples.html / studio-tools.html) -->
     <aside class="cart-drawer" id="cartDrawer" role="dialog" aria-modal="true" aria-labelledby="cartTitle" aria-hidden="true" tabindex="-1">
         <div class="cart-header">
-            <div class="cart-heading">
-                <h2 id="cartTitle">
-                    <i class="fas fa-shopping-cart"></i>
-                    Your Cart
-                </h2>
-                <p id="cartItemLabel">0 items</p>
+            <div>
+                <p class="section-eyebrow">YOUR SELECTION</p>
+                <h2 id="cartTitle">Your Cart <span id="cartItemLabel">0 items</span></h2>
             </div>
 
-            <button type="button" class="cart-close" id="closeCart" aria-label="Close shopping cart">
+            <button type="button" class="close-cart" id="closeCart" aria-label="Close shopping cart">
                 <i class="fas fa-times"></i>
             </button>
         </div>
 
-        <div class="cart-content">
+        <div class="cart-body">
             <div class="cart-empty" id="cartEmpty">
                 <div class="cart-empty-icon">
                     <i class="fas fa-shopping-basket"></i>
@@ -312,18 +311,18 @@
                 <strong id="cartTotal">₦0</strong>
             </div>
 
-            <p class="cart-checkout-note">
-                Your purchased files will be available to download after payment is verified.
-            </p>
-
-            <button type="button" class="btn btn-primary cart-checkout-btn" id="checkoutBtn">
-                <span>Proceed to Checkout</span>
+            <button type="button" class="btn btn-primary checkout-btn" id="checkoutBtn">
+                Proceed to Checkout
                 <i class="fas fa-lock"></i>
             </button>
 
-            <button type="button" class="cart-continue-btn" id="cartContinueShopping">
+            <button type="button" class="btn btn-secondary" id="cartContinueShopping">
                 Continue Shopping
             </button>
+
+            <p class="checkout-note">
+                Secure checkout powered by Paystack.
+            </p>
         </div>
     </aside>
 
@@ -361,7 +360,7 @@
 
     <!-- PAYSTACK AND STORE SCRIPT -->
     <script src="https://js.paystack.co/v2/inline.js"></script>
-    <script src="app.js?v=11"></script>
+    <script src="app.js?v=12"></script>
 
     <script>
         /*
