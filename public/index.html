@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,7 +7,7 @@
     <meta name="description" content="Discover premium Afrobeat instrumentals from WagwanSpark. Explore original sounds, find your next beat, and create something unforgettable.">
     <meta name="theme-color" content="#101010">
 
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=2">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
@@ -362,9 +361,14 @@
 
     <!-- PAYSTACK AND STORE SCRIPT -->
     <script src="https://js.paystack.co/v2/inline.js"></script>
-    <script src="app.js?v=9"></script>
+    <script src="app.js?v=11"></script>
 
     <script>
+        /*
+         * The hamburger menu is handled by app.js. The old inline toggle that
+         * used to live here was removed: with both running, every tap opened
+         * and closed the menu in the same instant, so it never appeared.
+         */
         document.addEventListener("DOMContentLoaded", function () {
             const year = document.getElementById("currentYear");
             if (year) {
@@ -382,24 +386,6 @@
             if (cartContinueButton) {
                 cartContinueButton.addEventListener("click", function () {
                     window.location.href = "index.html#beats";
-                });
-            }
-
-            const toggle = document.getElementById("navbarToggle");
-            const menu = document.getElementById("navMenu");
-
-            if (toggle && menu) {
-                function toggleMenu() {
-                    const isOpen = menu.classList.toggle("active");
-                    toggle.setAttribute("aria-expanded", String(isOpen));
-                }
-
-                toggle.addEventListener("click", toggleMenu);
-                toggle.addEventListener("keydown", function (event) {
-                    if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        toggleMenu();
-                    }
                 });
             }
         });
