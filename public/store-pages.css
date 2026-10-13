@@ -1,0 +1,621 @@
+/* ==========================================================
+   WAGWANSPARK — PREMIUM STORE PAGES (samples + studio tools)
+   Load AFTER styles.css. Uses its design tokens (--primary-color,
+   --gradient, --border-color ...). Every rule is scoped to
+   body.store-page or to classes that exist only on these pages,
+   so index.html is not affected.
+   ========================================================== */
+
+/* ---------- hero ---------- */
+.store-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 72px 0 60px;
+  text-align: center;
+  background:
+    radial-gradient(60% 55% at 50% 0%, rgba(29, 185, 84, 0.2), transparent 70%),
+    radial-gradient(40% 40% at 92% 18%, rgba(255, 107, 157, 0.07), transparent 70%),
+    var(--secondary-color);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* faint studio grid, fading out from the top */
+.store-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 72%);
+}
+
+.store-hero .container {
+  position: relative;
+  z-index: 1;
+}
+
+.store-hero h1 {
+  margin: 0 0 16px;
+  font-size: clamp(2.3rem, 9vw, 4.1rem);
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+  color: #fff;
+}
+
+.store-hero h1 span {
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.store-hero .section-description {
+  max-width: 34rem;
+  margin: 0 auto 28px;
+  font-size: 1.02rem;
+}
+
+.store-hero .btn {
+  box-shadow: 0 12px 34px rgba(29, 185, 84, 0.28);
+}
+
+/* ---------- eyebrow + description (page sections only) ---------- */
+.store-hero .section-eyebrow,
+.store-section .section-eyebrow,
+.store-cta .section-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+.store-hero .section-description,
+.store-section .section-description,
+.store-cta p:not(.section-eyebrow) {
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+/* ---------- catalogue section ---------- */
+.store-section {
+  padding: 56px 0 40px;
+}
+
+.store-section .section-heading {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.store-section .section-heading h2 {
+  margin: 0 0 12px;
+  font-size: clamp(1.8rem, 6.5vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #fff;
+}
+
+.store-section .section-heading h2::after {
+  content: "";
+  display: block;
+  width: 52px;
+  height: 3px;
+  margin: 14px auto 0;
+  border-radius: 3px;
+  background: var(--gradient);
+}
+
+.store-section .section-heading .section-description {
+  max-width: 32rem;
+  margin: 0 auto;
+  font-size: 0.98rem;
+}
+
+/* ---------- search ---------- */
+.catalogue-toolbar {
+  display: flex;
+  justify-content: center;
+  margin: 28px 0 30px;
+}
+
+.catalogue-toolbar .search-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(560px, 100%);
+  height: 54px;
+  padding: 0 20px;
+  border-radius: 50px;
+  background: var(--light-bg);
+  border: 1px solid var(--border-color);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.catalogue-toolbar .search-box:focus-within {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 20px rgba(29, 185, 84, 0.14);
+}
+
+.catalogue-toolbar .search-box i {
+  flex: 0 0 auto;
+  color: var(--primary-color);
+}
+
+.catalogue-toolbar .search-box input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 16px; /* 16px stops iOS zooming into the field */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.catalogue-toolbar .search-box input::placeholder {
+  color: #858585;
+}
+
+.catalogue-toolbar .search-box input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+/* ---------- product grid ---------- */
+.store-section .product-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+@media (min-width: 700px) {
+  .store-section .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 22px;
+  }
+}
+
+/* loading / empty / error messages span the full grid */
+.store-section .product-grid > .catalogue-loading,
+.store-section .product-grid > .catalogue-message {
+  grid-column: 1 / -1;
+}
+
+.catalogue-loading,
+.empty-catalogue {
+  padding: 56px 16px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.catalogue-loading p,
+.empty-catalogue p {
+  margin: 8px 0 0;
+}
+
+.catalogue-loading i,
+.empty-catalogue i {
+  font-size: 1.7rem;
+  color: var(--primary-color);
+}
+
+.empty-catalogue h3 {
+  margin: 10px 0 0;
+  color: #fff;
+}
+
+.store-section .catalogue-message {
+  padding: 48px 16px;
+  color: var(--text-secondary);
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+}
+
+/* ---------- product cards ---------- */
+.store-section .product-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #202020, #171717);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.store-section .product-card:focus-within {
+  border-color: rgba(29, 185, 84, 0.6);
+}
+
+@media (hover: hover) {
+  .store-section .product-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(29, 185, 84, 0.6);
+    box-shadow:
+      0 20px 46px rgba(0, 0, 0, 0.5),
+      0 12px 44px rgba(29, 185, 84, 0.13);
+  }
+
+  .store-section .product-card:hover .product-artwork img {
+    transform: scale(1.06);
+  }
+}
+
+/* artwork: always a clean square, never stretched */
+.store-section .product-artwork {
+  position: relative;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: var(--lighter-bg);
+}
+
+.store-section .product-artwork img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+/* soft fade at the bottom of the artwork */
+.store-section .product-artwork::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 55%, rgba(16, 16, 16, 0.6));
+}
+
+/* shown when the artwork fails to load */
+.store-section .product-artwork.artwork-placeholder {
+  background:
+    radial-gradient(70% 70% at 50% 40%, rgba(29, 185, 84, 0.22), transparent 70%),
+    var(--lighter-bg);
+}
+
+.store-section .product-artwork.artwork-placeholder::before {
+  content: "\f001";
+  font-family: "Font Awesome 6 Free", "Font Awesome 5 Free", sans-serif;
+  font-weight: 900;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.4rem;
+  color: rgba(29, 185, 84, 0.7);
+}
+
+.store-section .product-category-label {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(8, 10, 9, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.store-section .artwork-play-icon {
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* card text */
+.store-section .product-info {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 14px 14px 16px;
+}
+
+.store-section .beat-title-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.store-section .beat-title-row h3 {
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+.store-section .product-price {
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: var(--primary-color);
+}
+
+.store-section .product-meta {
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.store-section .product-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.store-section .product-format {
+  margin: 10px 0 0;
+  font-size: 0.74rem;
+}
+
+/* keep the button pinned to the bottom so cards line up in a row */
+.store-section .product-actions {
+  margin-top: auto !important;
+  padding-top: 12px;
+}
+
+.store-section .product-actions .btn-primary {
+  box-shadow: 0 8px 22px rgba(29, 185, 84, 0.2);
+}
+
+/* ---------- call to action ---------- */
+.store-cta {
+  padding: 24px 0 64px;
+}
+
+.store-cta .container {
+  width: calc(100% - 32px);
+  max-width: 1000px;
+  padding: 46px 24px;
+  text-align: center;
+  border-radius: 24px;
+  background:
+    radial-gradient(80% 130% at 50% 0%, rgba(29, 185, 84, 0.17), transparent 62%),
+    linear-gradient(160deg, #161616, #0f0f0f);
+  border: 1px solid rgba(29, 185, 84, 0.26);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.store-cta h2 {
+  margin: 0 0 12px;
+  font-size: clamp(1.6rem, 6vw, 2.3rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #fff;
+}
+
+.store-cta p:not(.section-eyebrow) {
+  max-width: 30rem;
+  margin: 0 auto 24px;
+}
+
+/* ==========================================================
+   NAVIGATION  (desktop link tweaks only)
+   ========================================================== */
+.store-page .nav-link {
+  white-space: nowrap;
+}
+
+.store-page .nav-link.active {
+  color: var(--primary-color);
+}
+
+/* Mobile menu (hamburger drawer) now lives in styles.css so every page shares it. */
+
+/* ==========================================================
+   FOOTER  (these pages use .site-footer, which styles.css
+   does not define)
+   ========================================================== */
+.store-page .site-footer {
+  padding: var(--spacing-4xl) var(--spacing-md) var(--spacing-2xl);
+  border-top: 1px solid var(--border-color);
+  background: #0d0d0d;
+}
+
+.store-page .site-footer .footer-content {
+  gap: var(--spacing-md);
+}
+
+.store-page .site-footer .footer-content > p {
+  color: var(--text-secondary);
+}
+
+.store-page .footer-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem 1.6rem;
+}
+
+.store-page .footer-navigation a {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.store-page .footer-navigation a:hover {
+  color: var(--primary-color);
+}
+
+.store-page .footer-copyright {
+  font-size: 0.85rem;
+  color: #7d7d7d !important;
+}
+
+/* ==========================================================
+   CART DRAWER  (summary had no padding; Continue Shopping and
+   the remove button had no styles)
+   ========================================================== */
+.store-page .cart-header .section-eyebrow {
+  display: block;
+  margin: 0 0 2px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+.store-page .cart-header h2 span {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.store-page .cart-summary {
+  flex-shrink: 0;
+  padding: 1.15rem 1.4rem calc(1.15rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border-color);
+  background: #1a1a1a;
+}
+
+.store-page .cart-summary-row {
+  margin-bottom: 0.65rem;
+}
+
+.store-page .cart-summary .btn-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 10px;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 50px;
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.store-page .cart-summary .btn-secondary:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.store-page .checkout-note {
+  margin-top: 0.75rem;
+  color: #929292;
+  font-size: 0.76rem;
+  text-align: center;
+}
+
+.store-page .cart-item-info h4 {
+  font-size: 0.95rem;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.store-page .cart-item-info p {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.store-page .cart-item-info strong {
+  color: var(--primary-color);
+  font-size: 0.95rem;
+}
+
+.store-page .cart-item-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #4a3034;
+  border-radius: 50%;
+  background: rgba(255, 107, 157, 0.07);
+  color: #ff8b9f;
+  font-size: 0.85rem;
+}
+
+.store-page .cart-item-remove:hover {
+  border-color: #a83250;
+  background: #a83250;
+  color: #fff;
+}
+
+/* ---------- audio player bar ---------- */
+.store-page .player-modal {
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+}
+
+.store-page .player-info #playerTitle {
+  color: var(--text-primary);
+}
+
+/* ---------- accessibility ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .store-section .product-card,
+  .store-section .product-artwork img {
+    transition: none;
+  }
+
+  .store-section .product-card:hover,
+  .store-section .product-card:hover .product-artwork img {
+    transform: none;
+  }
+}
+
+/* ---------- small phones ---------- */
+@media (max-width: 480px) {
+  .store-hero {
+    padding: 52px 0 46px;
+  }
+
+  .store-section {
+    padding-top: 44px;
+  }
+
+  .store-section .product-card {
+    border-radius: 14px;
+  }
+
+  .store-section .product-info {
+    padding: 12px 12px 14px;
+  }
+
+  .store-section .beat-title-row h3 {
+    font-size: 0.94rem;
+  }
+
+  .catalogue-toolbar .search-box {
+    height: 50px;
+    padding: 0 16px;
+  }
+}
