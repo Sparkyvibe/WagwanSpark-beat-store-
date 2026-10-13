@@ -5,11 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WagwanSpark — Premium Beats & Production Sounds</title>
     <meta name="description" content="Discover premium Afrobeat instrumentals from WagwanSpark. Explore original sounds, find your next beat, and create something unforgettable.">
-    <meta name="theme-color" content="#101010">
+    <meta name="theme-color" content="#0a0a0a">
 
-    <link rel="stylesheet" href="styles.css?v=2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="styles.css?v=3">
     <!-- Shared cart drawer styling (same file samples.html and studio-tools.html load) -->
     <link rel="stylesheet" href="cart.css?v=1">
+    <!-- Sonic Kinetics redesign layer (loads last, overrides the base sheets) -->
+    <link rel="stylesheet" href="theme.css?v=1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
@@ -43,21 +49,71 @@
 
     <!-- HERO SECTION -->
     <section class="hero" id="home">
-        <div class="hero-content">
-            <p class="hero-subtitle">WELCOME TO THE SOUND LAB</p>
+        <div class="hero-inner">
+            <div class="hero-copy">
+                <p class="hero-eyebrow">WagwanSpark Sound Lab · Lagos</p>
 
-            <h1>Let the <span>Vibe</span><br>Be Your Guide</h1>
+                <h1 class="hero-title">Let the vibe<br>be <em>your guide.</em></h1>
 
-            <p class="hero-description">
-                Original sounds. Limitless possibilities.
-                Premium instrumentals for artists ready to create
-                something unforgettable.
-            </p>
+                <p class="hero-lede">
+                    Original instrumentals, sample packs and studio tools —
+                    engineered for artists who want a sound of their own.
+                </p>
 
-            <a href="#beats" class="btn btn-primary">
-                Explore Beats
-                <i class="fas fa-arrow-right"></i>
-            </a>
+                <form class="hero-search" id="heroSearchForm" role="search">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input
+                        id="heroSearchInput"
+                        type="search"
+                        placeholder="Search beats by title, genre or key…"
+                        aria-label="Search beats"
+                        autocomplete="off"
+                    >
+                    <button type="submit" class="hero-search-btn">
+                        Explore Beats
+                        <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                    </button>
+                </form>
+
+                <p class="hero-meta">
+                    <span>Afrobeat · Trap · R&amp;B</span>
+                    <span>Instant download</span>
+                    <span>Secure Paystack checkout</span>
+                </p>
+            </div>
+
+            <!-- Signature visual: chrome + iridescent signal waves -->
+            <div class="hero-visual" aria-hidden="true">
+                <div class="hero-orb"></div>
+
+                <svg class="hero-ring" viewBox="0 0 200 200" focusable="false">
+                    <circle cx="100" cy="100" r="84" fill="none"
+                        stroke="#e5e5e5" stroke-opacity="0.55"
+                        stroke-width="1" stroke-dasharray="3 7"></circle>
+                    <circle cx="100" cy="100" r="62" fill="none"
+                        stroke="#4deeea" stroke-opacity="0.5" stroke-width="1"></circle>
+                    <circle cx="100" cy="100" r="44" fill="none"
+                        stroke="#764ba2" stroke-opacity="0.5" stroke-width="1"></circle>
+                </svg>
+
+                <svg class="hero-wave" viewBox="0 0 480 300"
+                    preserveAspectRatio="none" focusable="false">
+                    <defs>
+                        <linearGradient id="wsChrome" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#ffffff"></stop>
+                            <stop offset="45%" stop-color="#e5e5e5"></stop>
+                            <stop offset="100%" stop-color="#6f6f6f"></stop>
+                        </linearGradient>
+                        <linearGradient id="wsIrid" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stop-color="#4deeea"></stop>
+                            <stop offset="100%" stop-color="#764ba2"></stop>
+                        </linearGradient>
+                    </defs>
+                    <g id="heroBars"></g>
+                </svg>
+
+                <span class="hero-visual-label">WagwanSpark · Signal</span>
+            </div>
         </div>
     </section>
 

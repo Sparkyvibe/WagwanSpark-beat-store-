@@ -21,6 +21,43 @@ docker compose -f docker-compose.base44.yml logs -f store    # Worker logs
 - `setup` is a one-shot service that runs before `store`: `.base44/dev-setup.sh` applies `.base44/schema.sql`, inserts the demo catalogue (`.base44/demo-products.sql`) and uploads the demo artwork/preview files into local R2. It is idempotent (`IF NOT EXISTS` / `INSERT OR IGNORE` / overwriting puts).
 - D1 + R2 state lives in the `wrangler-state` volume at `/data/state` (not in the repo). `docker compose -f docker-compose.base44.yml down -v` wipes it and the next `up` re-seeds.
 
+## Frontend structure (Sonic Kinetics redesign)
+
+Three static pages served by the `ASSETS` binding: `index.html` (Beats/home),
+`samples.html` (`/samples`), `studio-tools.html` (`/studio-tools`). All of them
+share one script, `public/app.js`, which renders the product cards, the cart
+drawer and the audio player.
+
+Stylesheet load order matters and must be kept:
+`styles.css` → `cart.css` → `store-pages.css` (samples/studio only) →
+`theme.css`. `theme.css` is the redesign layer and is loaded **last on all
+three pages** so it can override the base sheets without editing them. Any new
+page must load `theme.css` too, or it will fall back to the old look.
+
+- Colour/type tokens live in `styles.css` `:root` (`--primary-color` electric
+  lime, `--secondary-color` the void, `--chrome`, `--iridescent`,
+  `--font-display`/`--font-mono`). Retune the palette there, not in
+  `theme.css`, so all pages follow.
+- `app.js` appends a runtime stylesheet (`#wagwanspark-interaction-fixes`) to
+  `head` *after* `theme.css`, so its rules win ties and it can beat
+  `theme.css` even at lower specificity when it uses `!important`. Keep its
+  accent hexes in sync with the tokens (currently `#ccff00`).
+- `theme.css` styles the shared cards via `.beats-grid` / `.store-section
+  .product-grid`, so Beats, Samples and Studio Tools stay identical.
+- Homepage hero: markup in `index.html` + `buildHeroVisual()` and
+  `bindHeroSearch()` in `app.js`. The hero search drives the same catalogue
+  filter as `#searchInput`; the two fields stay mirrored.
+
+To verify the redesign: `curl http://localhost:3000/theme.css` (200) and check
+the homepage hero renders its 34 waveform bars.
+
+### Verifying the secondary pages in the Base44 preview
+
+The site is multi-page with no SPA router, so the preview browser can only load
+the home route — navigating to `/samples` fails. Verify those pages from a
+preview script by pointing a same-origin `<iframe>` at `/samples` or
+`/studio-tools` and reading `iframe.contentDocument`.
+
 ### Schema
 
 The repository has no migrations directory, but every route needs the `beats` table, so `.base44/schema.sql` creates it (columns inferred from the SQL in `src/index.js`). `email_deliveries` is created at runtime by the Paystack webhook — nothing to do locally.

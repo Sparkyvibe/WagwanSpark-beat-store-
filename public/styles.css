@@ -4,17 +4,27 @@
 ======================================== */
 
 :root {
-    --primary-color: #1db954;
-    --secondary-color: #101010;
-    --accent-color: #ff6b9d;
-    --light-bg: #1c1c1c;
-    --lighter-bg: #292929;
-    --text-primary: #ffffff;
-    --text-secondary: #b3b3b3;
-    --border-color: #353535;
-    --gradient: linear-gradient(135deg, #1db954 0%, #119447 55%, #ff6b9d 140%);
-    --card-radius: 14px;
-    --content-width: 1200px;
+    /* ELECTRIC CITADEL — deep charcoal, graphite, chrome, electric lime */
+    --primary-color: #ccff00;      /* electric lime: actions, prices, selected states */
+    --primary-ink: #0a0a0a;        /* ink to use on top of lime */
+    --secondary-color: #0a0a0a;    /* the void */
+    --accent-color: #4deeea;       /* iridescent cyan */
+    --light-bg: #161616;           /* graphite surface */
+    --lighter-bg: #1e1e1e;
+    --text-primary: #f4f4f4;
+    --text-secondary: #9a9a9a;
+    --chrome: #e5e5e5;             /* chrome silver: rules & secondary text */
+    --border-color: #262626;
+    --border-strong: #343434;
+    --iridescent: linear-gradient(90deg, #4deeea 0%, #764ba2 100%);
+    --gradient: linear-gradient(135deg, #e2ff66 0%, #ccff00 55%, #a5e000 100%);
+    --card-radius: 12px;
+    --content-width: 1280px;
+
+    /* Typography */
+    --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --font-display: "Inter Tight", "Inter", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     
     /* Spacing System */
     --spacing-xs: 0.5rem;
@@ -47,7 +57,7 @@ body {
     overflow-x: hidden;
     background: var(--secondary-color);
     color: var(--text-primary);
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    font-family: var(--font-sans);
     line-height: 1.6;
 }
 
