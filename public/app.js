@@ -18,6 +18,9 @@
   };
 
   const CART_STORAGE_KEY = "wagwanspark-cart-v3";
+  // Small snapshots of cart items so the cart survives page changes
+  // without needing every catalogue to be fetched on every page.
+  const CART_ITEMS_STORAGE_KEY = "wagwanspark-cart-items-v1";
   const CATEGORIES = ["beats", "samples", "studio-tools"];
   const REQUEST_TIMEOUT_MS = 12000;
 
@@ -55,6 +58,12 @@
       "studio-tools": ""
     },
     cart: [],
+    cartItems: {},
+    catalogueLoaded: {
+      beats: false,
+      samples: false,
+      "studio-tools": false
+    },
     activePreview: null,
     activeFilter: "all",
     search: "",
@@ -581,6 +590,8 @@
       });
 
       state.catalogueErrors[category] = "";
+      state.catalogueLoaded[category] = true;
+      reconcileCart();
     } catch (error) {
       console.error(`${category} catalogue could not load:`, error);
 
@@ -592,17 +603,29 @@
     renderAll();
   }
 
+  function categoriesForThisPage() {
+    if (document.getElementById("samplesGrid")) return ["samples"];
+    if (document.getElementById("studioToolsGrid")) return ["studio-tools"];
+    if (document.getElementById("beatsGrid")) return ["beats"];
+    return [];
+  }
+
   async function loadCatalogues() {
-    // Each catalogue handles its own errors, so one failed request
-    // cannot prevent another catalogue from rendering.
-    await Promise.all([
-      loadOneCatalogue("beats", API.beats),
-      loadOneCatalogue("samples", `${API.products}?category=samples`),
-      loadOneCatalogue(
-        "studio-tools",
-        `${API.products}?category=studio-tools`
-      )
-    ]);
+    // Only fetch the catalogue this page actually shows. The cart uses
+    // saved snapshots for items from other categories.
+    const loaders = {
+      beats: () => loadOneCatalogue("beats", API.beats),
+      samples: () =>
+        loadOneCatalogue("samples", `${API.products}?category=samples`),
+      "studio-tools": () =>
+        loadOneCatalogue(
+          "studio-tools",
+          `${API.products}?category=studio-tools`
+        )
+    };
+
+    // Each catalogue handles its own errors.
+    await Promise.all(categoriesForThisPage().map(name => loaders[name]()));
 
     renderAll();
   }
@@ -612,9 +635,9 @@
     const inCart = state.cart.includes(key);
     const previewAudio = productPreview(product);
 
-    const playable =
-      (category === "beats" || category === "samples") &&
-      Boolean(previewAudio);
+    // Any product with an uploaded preview is playable, including
+    // Studio Tools such as FLP projects.
+    const playable = Boolean(previewAudio);
 
     const metadata = [];
 
@@ -819,8 +842,8 @@
           query
             ? "No products match your search."
             : category === "samples"
-              ? "No sample packs are published yet. Publish a sample pack in Admin to display it here."
-              : "No Studio Tools are published yet. Publish a Studio Tool in Admin to display it here."
+              ? "No sample packs are available yet. Check back soon."
+              : "No studio tools are available yet. Check back soon."
         }</p></div>`;
   }
 
@@ -833,6 +856,10 @@
   function saveCart() {
     try {
       localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.cart));
+      localStorage.setItem(
+        CART_ITEMS_STORAGE_KEY,
+        JSON.stringify(state.cartItems)
+      );
     } catch (error) {
       console.warn("Cart could not be saved.", error);
     }
@@ -850,6 +877,29 @@
     } catch {
       state.cart = [];
     }
+
+    try {
+      const items = JSON.parse(
+        localStorage.getItem(CART_ITEMS_STORAGE_KEY) || "{}"
+      );
+
+      state.cartItems =
+        items && typeof items === "object" && !Array.isArray(items)
+          ? items
+          : {};
+    } catch {
+      state.cartItems = {};
+    }
+  }
+
+  function cartSnapshot(product) {
+    return {
+      id: product.id,
+      category: product.category,
+      title: product.title,
+      price: product.price,
+      artwork: productArtwork(product)
+    };
   }
 
   function getCartProducts() {
@@ -861,8 +911,61 @@
       all.map(product => [cartKey(product), product])
     );
 
-    state.cart = state.cart.filter(key => byKey.has(key));
-    return state.cart.map(key => byKey.get(key));
+    // Never edit state.cart here. This runs before catalogues have
+    // loaded, and pruning at that point used to empty the cart.
+    // Prefer the live product, fall back to the saved snapshot.
+    return state.cart
+      .map(key => byKey.get(key) || state.cartItems[key])
+      .filter(Boolean);
+  }
+
+  // Runs once a catalogue has loaded successfully: refresh prices and
+  // titles from live data, and drop items that are no longer published.
+  function reconcileCart() {
+    const byKey = new Map();
+
+    CATEGORIES.forEach(category => {
+      (state.products[category] || []).forEach(product => {
+        byKey.set(cartKey(product), product);
+      });
+    });
+
+    let changed = false;
+
+    state.cart = state.cart.filter(key => {
+      const live = byKey.get(key);
+
+      if (live) {
+        state.cartItems[key] = cartSnapshot(live);
+        changed = true;
+        return true;
+      }
+
+      const saved = state.cartItems[key];
+
+      // Only drop an item when its own catalogue loaded without error.
+      // A temporary failure must not empty the cart.
+      if (saved && state.catalogueLoaded[saved.category]) {
+        delete state.cartItems[key];
+        changed = true;
+        return false;
+      }
+
+      // Legacy cart entry with no snapshot: keep it until its
+      // catalogue has loaded, then prune it.
+      if (!saved) {
+        const category = key.includes(":") ? key.split(":")[0] : "beats";
+
+        if (state.catalogueLoaded[category]) {
+          changed = true;
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    if (changed) saveCart();
   }
 
   function addToCart(product, openDrawer = true) {
@@ -870,6 +973,7 @@
 
     const key = cartKey(product);
     if (!state.cart.includes(key)) state.cart.push(key);
+    state.cartItems[key] = cartSnapshot(product);
 
     saveCart();
     renderAll();
@@ -879,6 +983,7 @@
 
   function removeFromCart(key) {
     state.cart = state.cart.filter(item => item !== key);
+    delete state.cartItems[key];
     saveCart();
     renderAll();
   }
