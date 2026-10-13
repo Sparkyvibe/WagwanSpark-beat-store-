@@ -381,9 +381,10 @@
       }
 
       #cartSummary .cart-checkout-btn,
-      #cartSummary #checkoutBtn,
-      #cartSummary #cartContinueShopping {
+      #cartSummary #checkoutBtn {
         box-sizing: border-box !important;
+        display: flex !important;
+        gap: 8px;
         width: 100% !important;
         max-width: 100% !important;
         min-width: 0 !important;
@@ -402,26 +403,12 @@
         cursor: pointer;
       }
 
-      #cartSummary .cart-checkout-btn,
-      #cartSummary #checkoutBtn {
-        display: flex !important;
-        gap: 8px;
-      }
-
-      #cartSummary #cartContinueShopping {
-        display: flex !important;
-        background: transparent;
-        color: inherit;
-        border: 1px solid rgba(255,255,255,.25);
-      }
+      /* Continue Shopping is styled by cart.css (same pill button as
+         the Sample Packs / Studio Tools cart). */
 
       #cartSummary #checkoutBtn:disabled {
         opacity: .6;
         cursor: not-allowed;
-      }
-
-      #cartSummary .cart-checkout-note {
-        margin: 12px 0;
       }
 
       .catalogue-message {
