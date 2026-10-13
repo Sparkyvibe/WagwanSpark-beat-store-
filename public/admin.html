@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -242,6 +241,28 @@
     .upload-row h3 { margin: 0 0 5px; font-size: 14px; }
     .upload-row p { font-size: 12px; margin: 0 0 10px; }
 
+    .file-status {
+      font-size: 12px;
+      font-weight: 700;
+      margin: 0 0 10px;
+      word-break: break-all;
+    }
+
+    .file-status.ok { color: var(--green); }
+    .file-status.missing { color: var(--red); }
+    .file-status.optional { color: var(--muted); }
+
+    .checklist {
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #0b0e0c;
+      font-size: 13px;
+    }
+
+    .checklist.ready { border-color: #2d7140; }
+    .checklist strong { display: block; margin-bottom: 4px; }
+
     .audio-preview {
       width: 100%;
       display: block;
@@ -336,7 +357,7 @@
                   <option value="samples">Samples</option>
                   <option value="studio-tools">Studio Tools</option>
                 </select>
-                <div class="hint">Choose where this product belongs in your store.</div>
+                <div class="hint">Choose where this product belongs in your store. FLP projects go under Studio Tools.</div>
               </div>
 
               <div class="field">
@@ -352,7 +373,7 @@
 
               <div class="field">
                 <label for="genre">Genre / type</label>
-                <input id="genre" maxlength="80" required placeholder="Afrobeat, Drum Kit, Plugin Preset...">
+                <input id="genre" maxlength="80" required placeholder="Afrobeat, Drum Kit, FLP Project...">
               </div>
 
               <div class="field">
@@ -384,6 +405,7 @@
             <div class="actions">
               <button id="saveDraftBtn" class="button" type="submit">Save as draft</button>
               <button id="publishBtn" class="button primary" type="button">Save &amp; publish</button>
+              <button id="unpublishBtn" class="button hidden" type="button">Unpublish (move to draft)</button>
               <button id="cancelEditBtn" class="button hidden" type="button">Cancel editing</button>
             </div>
           </form>
@@ -393,9 +415,12 @@
               <h2>Product files</h2>
             </div>
 
+            <div id="publishChecklist" class="checklist" aria-live="polite"></div>
+
             <div class="upload-row">
               <h3>01 · Artwork</h3>
               <p>JPG, PNG or WebP · Maximum 10 MB · Required for all categories</p>
+              <div id="artworkStatus" class="file-status"></div>
               <form data-kind="artwork" class="uploadForm">
                 <input type="file" name="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
                 <div class="actions">
@@ -406,7 +431,8 @@
 
             <div id="previewUploadRow" class="upload-row">
               <h3>02 · Preview audio</h3>
-              <p>MP3 or WAV · Maximum 25 MB · Required for Beats; optional for Samples and Studio Tools</p>
+              <p id="previewRule">MP3 or WAV · Maximum 25 MB · Required for Beats; optional for Samples and Studio Tools</p>
+              <div id="previewFileStatus" class="file-status"></div>
 
               <form id="previewUploadForm" data-kind="preview" class="uploadForm">
                 <input id="previewFileInput" type="file" name="file" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" required>
@@ -423,7 +449,8 @@
 
             <div class="upload-row">
               <h3>03 · Download package</h3>
-              <p>Private ZIP containing your product files · Maximum 100 MB · Required for all categories</p>
+              <p>Private ZIP containing your product files (for an FLP: the .flp plus its samples) · Maximum 100 MB · Required for all categories</p>
+              <div id="zipStatus" class="file-status"></div>
               <form data-kind="zip" class="uploadForm">
                 <input type="file" name="file" accept=".zip,application/zip" required>
                 <div class="actions">
@@ -462,6 +489,7 @@
       let csrfToken = "";
       let beats = [];
       let currentBeatId = "";
+      let currentStatus = "draft";
       let busy = false;
       let selectedAudioUrl = "";
       let catalogueAudio = null;
@@ -541,9 +569,13 @@
         if (isBeat) {
           $("uploadHint").textContent =
             "Beats require artwork, preview audio and ZIP before publishing.";
+          $("previewRule").textContent =
+            "MP3 or WAV · Maximum 25 MB · Required for Beats";
         } else {
           $("uploadHint").textContent =
             `${CATEGORY_LABELS[category]} require artwork and ZIP before publishing. Preview audio is optional, but recommended so customers can listen before buying.`;
+          $("previewRule").textContent =
+            "MP3 or WAV · Maximum 25 MB · Optional for Samples and Studio Tools, but recommended";
         }
 
         if (!currentBeatId) {
@@ -556,6 +588,88 @@
                   : "a Studio Tools product"
             );
         }
+
+        renderFileStatus();
+      }
+
+      // Shows which files are already stored for the product being managed
+      // and whether it has everything needed to publish.
+      function renderFileStatus() {
+        const beat = beats.find(item => item.id === currentBeatId);
+
+        if (!beat) {
+          $("publishChecklist").textContent = "";
+          $("artworkStatus").textContent = "";
+          $("previewFileStatus").textContent = "";
+          $("zipStatus").textContent = "";
+          return;
+        }
+
+        const category = $("category").value;
+        const needsPreview = category === "beats";
+
+        const setStatus = (id, key, required) => {
+          const el = $(id);
+          if (key) {
+            el.textContent = "✓ Uploaded: " + key;
+            el.className = "file-status ok";
+          } else if (required) {
+            el.textContent = "✗ Not uploaded yet (required to publish)";
+            el.className = "file-status missing";
+          } else {
+            el.textContent = "Not uploaded (optional)";
+            el.className = "file-status optional";
+          }
+        };
+
+        setStatus("artworkStatus", beat.artwork_key, true);
+        setStatus("previewFileStatus", beat.preview_key, needsPreview);
+        setStatus("zipStatus", beat.zip_key, true);
+
+        const missing = [];
+        if (!beat.artwork_key) missing.push("artwork");
+        if (needsPreview && !beat.preview_key) missing.push("preview audio");
+        if (!beat.zip_key) missing.push("ZIP package");
+
+        const box = $("publishChecklist");
+
+        if (beat.status === "published") {
+          box.className = "checklist ready";
+          box.innerHTML = "";
+          const strong = document.createElement("strong");
+          strong.textContent = "This product is live in the store.";
+          box.appendChild(strong);
+        } else if (missing.length) {
+          box.className = "checklist";
+          box.innerHTML = "";
+          const strong = document.createElement("strong");
+          strong.textContent = "Not ready to publish yet";
+          box.append(strong, "Still needed: " + missing.join(", ") + ".");
+        } else {
+          box.className = "checklist ready";
+          box.innerHTML = "";
+          const strong = document.createElement("strong");
+          strong.textContent = "Ready to publish";
+          box.append(strong, "All required files are uploaded. Press Save & publish.");
+        }
+      }
+
+      // Adjusts the buttons to match the product being edited so that
+      // saving changes to a live product never silently unpublishes it.
+      function updateActionButtons() {
+        const editing = Boolean(currentBeatId);
+        const published = editing && currentStatus === "published";
+
+        if (!editing) {
+          $("saveDraftBtn").textContent = "Save as draft";
+        } else if (published) {
+          $("saveDraftBtn").textContent = "Save changes";
+        } else {
+          $("saveDraftBtn").textContent = "Save changes (stay draft)";
+        }
+
+        $("publishBtn").classList.toggle("hidden", published);
+        $("unpublishBtn").classList.toggle("hidden", !published);
       }
 
       async function checkSession() {
@@ -626,7 +740,14 @@
         try {
           const data = await api("/api/admin/beats");
           beats = Array.isArray(data.beats) ? data.beats : [];
+
+          // Keep the status of the product being edited in sync.
+          const open = beats.find(item => item.id === currentBeatId);
+          if (open) currentStatus = open.status === "published" ? "published" : "draft";
+
           renderBeats();
+          renderFileStatus();
+          updateActionButtons();
           notice("");
         } catch (error) {
           notice(error.message, "error");
@@ -634,7 +755,14 @@
       }
 
       function getPreviewUrl(product) {
-        // Use a preview URL if the API includes one.
+        // The admin list returns raw database rows, so a stored preview
+        // shows up as preview_key. Play it through the authenticated admin
+        // route, which also works for drafts.
+        if (product.preview_key) {
+          return `/api/admin/beats/${encodeURIComponent(product.id)}/preview`;
+        }
+
+        // Fallbacks for responses that already include a preview URL.
         const candidates = [
           product.previewAudio,
           product.preview_audio,
@@ -644,19 +772,9 @@
           product.preview_url
         ];
 
-        const url = candidates.find(value =>
+        return candidates.find(value =>
           typeof value === "string" && value.trim()
-        );
-
-        if (url) return url;
-
-        // The media route follows the existing artwork route convention.
-        // This fallback works only if the Worker exposes /api/media/:id/preview.
-        if (product.preview_uploaded || product.has_preview) {
-          return `/api/media/${encodeURIComponent(product.id)}/preview`;
-        }
-
-        return "";
+        ) || "";
       }
 
       function stopCatalogueAudio() {
@@ -667,12 +785,12 @@
         }
       }
 
-      function playCataloguePreview(product, button) {
+      function playCataloguePreview(product) {
         const url = getPreviewUrl(product);
 
         if (!url) {
           notice(
-            "No preview URL was returned for this product. Upload the preview audio, then refresh the catalogue.",
+            "No preview audio has been uploaded for this product.",
             "error"
           );
           return;
@@ -698,7 +816,7 @@
 
         audio.addEventListener("error", () => {
           notice(
-            "The preview file could not be loaded. Confirm that the Worker provides a playable preview URL for this product.",
+            "The preview file could not be loaded. Re-upload the preview audio and try again.",
             "error"
           );
         }, { once: true });
@@ -707,7 +825,7 @@
           notice("Playing preview: " + (product.title || product.id), "success");
         }).catch(() => {
           notice(
-            "The preview could not be played. Check that a preview file has been uploaded and its URL is accessible.",
+            "The preview could not be played. Check that a preview file has been uploaded.",
             "error"
           );
         });
@@ -761,15 +879,13 @@
           const actions = document.createElement("div");
           actions.className = "beat-actions";
 
-          const previewUrl = getPreviewUrl(beat);
-
-          if (previewUrl) {
+          if (getPreviewUrl(beat)) {
             const preview = document.createElement("button");
             preview.className = "button";
             preview.type = "button";
             preview.textContent = "▶ Preview";
             preview.addEventListener("click", () => {
-              playCataloguePreview(beat, preview);
+              playCataloguePreview(beat);
             });
             actions.appendChild(preview);
           }
@@ -820,13 +936,13 @@
         $("category").value = "beats";
         $("price").value = "7000";
         $("formHeading").textContent = "Add a product";
-        $("saveDraftBtn").textContent = "Save as draft";
-        $("publishBtn").textContent = "Save & publish";
         $("cancelEditBtn").classList.add("hidden");
         $("uploadSection").classList.add("hidden");
 
         currentBeatId = "";
+        currentStatus = "draft";
         updateCategoryUI();
+        updateActionButtons();
       }
 
       function editBeat(id) {
@@ -837,6 +953,7 @@
         stopCatalogueAudio();
 
         currentBeatId = id;
+        currentStatus = beat.status === "published" ? "published" : "draft";
         $("beatIdOriginal").value = id;
         $("beatId").value = beat.id;
         $("beatId").disabled = true;
@@ -851,16 +968,16 @@
         $("featured").checked = Number(beat.featured) === 1;
 
         $("formHeading").textContent = "Manage: " + (beat.title || beat.id);
-        $("saveDraftBtn").textContent = "Save changes as draft";
-        $("publishBtn").textContent = "Save & publish";
         $("cancelEditBtn").classList.remove("hidden");
         $("uploadSection").classList.remove("hidden");
 
         updateCategoryUI();
+        updateActionButtons();
         $("beatForm").scrollIntoView({ behavior: "smooth", block: "start" });
       }
 
-      async function saveBeat(publish) {
+      // targetStatus: "draft" or "published".
+      async function saveBeat(targetStatus) {
         const id = $("beatId").value.trim().toLowerCase();
         const existingId = $("beatIdOriginal").value;
 
@@ -874,7 +991,7 @@
           musical_key: $("musicalKey").value.trim(),
           description: $("description").value.trim(),
           featured: $("featured").checked ? 1 : 0,
-          status: publish ? "published" : "draft"
+          status: targetStatus
         };
 
         if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
@@ -894,48 +1011,62 @@
         }
 
         const isEditing = Boolean(existingId);
+        const wasPublished = isEditing && currentStatus === "published";
 
         if (isEditing) {
           await api("/api/admin/beats/" + encodeURIComponent(existingId), {
             method: "PATCH",
             body: JSON.stringify(payload)
           });
-        } else {
-          if (publish) {
-            throw new Error(
-              "First save the product as a draft, upload its required files, then publish it."
-            );
-          }
 
+          currentStatus = targetStatus;
+        } else {
+          // New products are always created as drafts: files must be
+          // uploaded before the product can be published.
           await api("/api/admin/beats", {
             method: "POST",
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ ...payload, status: "draft" })
           });
 
           currentBeatId = id;
+          currentStatus = "draft";
           $("beatIdOriginal").value = id;
           $("beatId").disabled = true;
           $("formHeading").textContent = "Manage: " + payload.title;
-          $("saveDraftBtn").textContent = "Save changes as draft";
           $("cancelEditBtn").classList.remove("hidden");
           $("uploadSection").classList.remove("hidden");
         }
 
         await loadBeats();
 
-        if (publish) {
+        // A draft that has just been published: clear the form.
+        if (isEditing && targetStatus === "published" && !wasPublished) {
           resetForm();
           notice("Product published successfully.", "success");
-        } else {
-          const message = payload.category === "beats"
-            ? "Draft saved. Upload artwork, preview audio and ZIP before publishing."
-            : "Draft saved. Upload artwork and ZIP before publishing. Preview audio is optional for this category.";
+          return;
+        }
+
+        if (!isEditing) {
+          const message = targetStatus === "published"
+            ? "Draft created. Products are published after their files are uploaded, so upload the files below, then press Save & publish."
+            : payload.category === "beats"
+              ? "Draft saved. Upload artwork, preview audio and ZIP before publishing."
+              : "Draft saved. Upload artwork and ZIP before publishing. Preview audio is optional for this category.";
 
           notice(message, "success");
-          updateCategoryUI();
+        } else if (targetStatus === "published") {
+          notice("Changes saved. The product is still live.", "success");
+        } else if (wasPublished) {
+          notice("Product moved back to draft. It is no longer visible in the store.", "success");
+        } else {
+          notice("Changes saved. The product is still a draft.", "success");
         }
+
+        updateCategoryUI();
+        updateActionButtons();
       }
 
+      // The main submit button keeps a live product live and a draft a draft.
       $("beatForm").addEventListener("submit", async event => {
         event.preventDefault();
         if (busy) return;
@@ -943,7 +1074,7 @@
         setBusy(true);
 
         try {
-          await saveBeat(false);
+          await saveBeat(currentStatus === "published" ? "published" : "draft");
         } catch (error) {
           notice(error.message, "error");
         } finally {
@@ -958,7 +1089,26 @@
         setBusy(true);
 
         try {
-          await saveBeat(true);
+          await saveBeat("published");
+        } catch (error) {
+          notice(error.message, "error");
+        } finally {
+          setBusy(false);
+        }
+      });
+
+      $("unpublishBtn").addEventListener("click", async () => {
+        if (busy) return;
+        if (!$("beatForm").reportValidity()) return;
+
+        if (!confirm("Unpublish this product? It will disappear from the store until you publish it again.")) {
+          return;
+        }
+
+        setBusy(true);
+
+        try {
+          await saveBeat("draft");
         } catch (error) {
           notice(error.message, "error");
         } finally {
@@ -1138,6 +1288,7 @@
       });
 
       updateCategoryUI();
+      updateActionButtons();
       checkSession();
     })();
   </script>
