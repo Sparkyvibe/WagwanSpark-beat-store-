@@ -63,7 +63,7 @@
             <div class="beat-detail-content" id="beatDetailContent">
                 <div class="beat-detail-artwork-wrap">
                     <div class="beat-detail-artwork product-card" data-previewable="false" id="beatDetailArtwork" data-product-id="" data-category="beats">
-                        <img src="" alt="" id="beatDetailArtworkImg" loading="eager"
+                        <img alt="" id="beatDetailArtworkImg" loading="eager"
                             onerror="this.onerror=null;this.style.display='none';this.parentElement.classList.add('artwork-placeholder');">
                         <span class="artwork-play-overlay" aria-hidden="true">
                             <span class="artwork-play-icon">
@@ -285,6 +285,8 @@
                 var artworkEl = document.getElementById("beatDetailArtwork");
                 var artworkImg = document.getElementById("beatDetailArtworkImg");
                 if (product.artwork) {
+                    artworkImg.style.display = "";
+                    artworkEl.classList.remove("artwork-placeholder");
                     artworkImg.src = product.artwork;
                     artworkImg.alt = product.title + " artwork";
                 }
