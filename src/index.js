@@ -168,6 +168,14 @@ function cleanText(value, maxLength = 200) {
 function validCategory(value) {
   return CATEGORIES.has(value) ? value : null;
 }
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 async function getProduct(env, id) {
   return env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description, artwork_key,
@@ -1385,14 +1393,71 @@ export default {
         });
       }
     }
-    // Individual beat pages: /beat/<id> serves beat.html.
-    // The ASSETS binding redirects /beat.html → /beat, so fetch /beat
-    // directly (the extensionless URL serves the same file).
+    // Individual beat pages: /beat/<id> serves beat.html with server-side
+    // Open Graph + Twitter Card metadata injected into the initial HTML so
+    // social crawlers (WhatsApp, X, etc.) can read the title, description
+    // and artwork without executing client-side JavaScript.
     const beatPageMatch = path.match(/^\/beat\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
     if (beatPageMatch && request.method === "GET") {
+      const beatId = beatPageMatch[1];
       const assetUrl = new URL(request.url);
       assetUrl.pathname = "/beat";
-      return env.ASSETS.fetch(new Request(assetUrl, request));
+      const assetResponse = await env.ASSETS.fetch(new Request(assetUrl, request));
+      if (!assetResponse.ok) return assetResponse;
+      let html = await assetResponse.text();
+      try {
+        const product = await getProduct(env, beatId);
+        if (product && product.status === "published") {
+          const title = String(product.title || beatId);
+          const description = "Listen to and purchase this beat from WagwanSpark Sound Lab.";
+          const beatUrl = `${url.origin}/beat/${beatId}`;
+          // Only advertise artwork when it actually exists in R2.
+          let hasArtwork = Boolean(product.artwork_key);
+          if (!hasArtwork) {
+            const recovered = await repairStoredFileKey(env, product, "artwork_key");
+            hasArtwork = recovered.found;
+          }
+          const artworkUrl = `${url.origin}/api/media/${encodeURIComponent(beatId)}/artwork`;
+          const ogTitle = `${title} | WagwanSpark Sound Lab`;
+          const metaTags = [
+            `<meta property="og:title" content="${escapeHtml(ogTitle)}">`,
+            `<meta property="og:description" content="${escapeHtml(description)}">`,
+            `<meta property="og:url" content="${escapeHtml(beatUrl)}">`,
+            `<meta property="og:type" content="website">`,
+            `<meta property="og:site_name" content="WagwanSpark Sound Lab">`,
+            hasArtwork
+              ? `<meta property="og:image" content="${escapeHtml(artworkUrl)}">`
+              : "",
+            hasArtwork
+              ? `<meta property="og:image:alt" content="${escapeHtml(title + " artwork")}">`
+              : "",
+            `<meta name="twitter:card" content="summary_large_image">`,
+            `<meta name="twitter:title" content="${escapeHtml(ogTitle)}">`,
+            `<meta name="twitter:description" content="${escapeHtml(description)}">`,
+            hasArtwork
+              ? `<meta name="twitter:image" content="${escapeHtml(artworkUrl)}">`
+              : ""
+          ].filter(Boolean).join("\n    ");
+          // Update the <title> tag with the actual beat name.
+          html = html.replace(
+            /<title>.*?<\/title>/s,
+            `<title>${escapeHtml(title)} — WagwanSpark Sound Lab</title>`
+          );
+          // Inject OG/Twitter tags right after the existing description meta.
+          html = html.replace(
+            /(<meta name="description"[^>]*>)/,
+            `$1\n    ${metaTags}`
+          );
+        }
+      } catch (error) {
+        console.error("Beat page OG metadata injection failed:", error);
+      }
+      const headers = new Headers(assetResponse.headers);
+      headers.set("Content-Type", "text/html; charset=utf-8");
+      return new Response(html, {
+        status: assetResponse.status,
+        headers
+      });
     }
     return env.ASSETS.fetch(request);
   }
