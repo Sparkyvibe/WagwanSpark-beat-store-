@@ -299,8 +299,8 @@
 
       .product-card-playable.is-preview-playing .artwork-play-icon {
         color: #101010;
-        background: #19d66b;
-        border-color: #19d66b;
+        background: #ccff00;
+        border-color: #ccff00;
       }
 
       .product-meta {
@@ -322,13 +322,13 @@
       }
 
       .product-format {
-        color: #19d66b !important;
+        color: #ccff00 !important;
         font-weight: 700 !important;
         letter-spacing: .02em;
       }
 
       .product-format .format-separator {
-        color: #19d66b;
+        color: #ccff00;
         padding: 0 3px;
       }
 
@@ -493,7 +493,6 @@
     const sub = document.createElement("div");
     sub.className = "nav-drawer-sub";
     sub.innerHTML =
-      '<a href="index.html#about">About</a>' +
       '<a href="index.html#contact">Contact</a>';
     navMenu.appendChild(sub);
 
@@ -574,6 +573,68 @@
         if (!target) return;
 
         setNavOpen(false);
+      });
+    }
+  }
+
+  // Builds the homepage hero waveform: a row of chrome bars whose
+  // staggered animation reads as an ambient signal. Purely decorative,
+  // so it is skipped when the hero is not on the page.
+  function buildHeroVisual() {
+    const group = document.getElementById("heroBars");
+
+    if (!group || group.childElementCount) return;
+
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const TOTAL = 34;
+
+    for (let i = 0; i < TOTAL; i += 1) {
+      const bar = document.createElementNS(SVG_NS, "rect");
+
+      bar.setAttribute("x", String(12 + i * 14));
+      bar.setAttribute("y", "46");
+      bar.setAttribute("width", "8");
+      bar.setAttribute("height", "208");
+      bar.setAttribute("rx", "4");
+      bar.setAttribute("class", i % 5 === 2 ? "bar irid" : "bar");
+
+      bar.style.animationDelay = `${(-i * 0.13).toFixed(2)}s`;
+      bar.style.animationDuration = `${(1.9 + (i % 6) * 0.28).toFixed(2)}s`;
+
+      group.appendChild(bar);
+    }
+  }
+
+  // The hero search field drives the same catalogue filter as the
+  // section search box, so both stay in sync.
+  function bindHeroSearch() {
+    const heroForm = document.getElementById("heroSearchForm");
+    const heroInput = document.getElementById("heroSearchInput");
+    const mainInput = document.getElementById("searchInput");
+
+    if (!heroInput) return;
+
+    heroInput.addEventListener("input", () => {
+      state.search = heroInput.value || "";
+      if (mainInput) mainInput.value = state.search;
+      renderBeats();
+    });
+
+    if (mainInput) {
+      mainInput.addEventListener("input", () => {
+        heroInput.value = mainInput.value;
+      });
+    }
+
+    if (heroForm) {
+      heroForm.addEventListener("submit", event => {
+        event.preventDefault();
+        state.search = heroInput.value || "";
+        if (mainInput) mainInput.value = state.search;
+        renderBeats();
+
+        const target = document.getElementById("beats");
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
   }
@@ -1535,6 +1596,8 @@
       });
     }
 
+    bindHeroSearch();
+
     const categorySearchInput =
       document.getElementById("sampleSearchInput") ||
       document.getElementById("studioToolsSearch");
@@ -1707,6 +1770,7 @@
     try {
       installStoreInteractionStyles();
       buildNavDrawer();
+      buildHeroVisual();
       configureNavigation();
       loadCart();
       bindEvents();
