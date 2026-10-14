@@ -118,18 +118,17 @@ h1, h2, h3, h4,
 }
 
 /* ==========================================================
-   4. HOMEPAGE HERO — "THE SIGNAL"
+   4. HOMEPAGE HERO — COHESIVE EMBLEM COMPOSITION
    ========================================================== */
 .hero {
   position: relative;
-  display: block;
-  min-height: 0;
-  padding: clamp(2.5rem, 5vw, 4.5rem) 0 clamp(2.5rem, 6vw, 5rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(440px, 72vh, 680px);
+  padding: clamp(3rem, 6vw, 5rem) 24px;
   overflow: hidden;
-  background:
-    radial-gradient(70% 55% at 12% 0%, rgba(204, 255, 0, 0.07), transparent 60%),
-    radial-gradient(50% 45% at 92% 12%, rgba(118, 75, 162, 0.14), transparent 65%),
-    var(--secondary-color);
+  background: var(--secondary-color);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -137,15 +136,67 @@ h1, h2, h3, h4,
   display: none;
 }
 
-.hero-inner {
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  align-items: center;
-  gap: clamp(1.75rem, 4vw, 3.5rem);
+/* Static fallback gradient — visible when WebGL canvas is hidden */
+.hero-shader-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(60% 55% at 30% 25%, rgba(204, 255, 0, 0.08), transparent 60%),
+    radial-gradient(50% 45% at 75% 70%, rgba(77, 238, 234, 0.06), transparent 65%),
+    radial-gradient(55% 50% at 50% 50%, rgba(118, 75, 162, 0.08), transparent 70%);
+}
+
+/* Animated WebGL shader gradient: ambient atmosphere across the hero */
+.hero-shader {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   width: 100%;
-  max-width: var(--content-width);
+  height: 100%;
+  display: block;
+}
+
+/* Large subtle chrome emblem as a backdrop visual */
+.hero-emblem-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.hero-emblem-large {
+  width: clamp(300px, 42vw, 560px);
+  height: auto;
+  max-height: 90%;
+  opacity: 0.15;
+  filter: blur(0.5px);
+}
+
+/* Hero content layered over the emblem */
+.hero-inner {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+  max-width: 640px;
   margin: 0 auto;
-  padding: 0 24px;
+}
+
+/* Subtle dark scrim behind the text for readability over the emblem */
+.hero-inner::before {
+  content: "";
+  position: absolute;
+  inset: -15% -25%;
+  z-index: -1;
+  background: radial-gradient(ellipse 55% 60% at center, rgba(8, 8, 8, 0.65), transparent 75%);
+  pointer-events: none;
 }
 
 .hero-eyebrow {
@@ -266,6 +317,7 @@ h1, h2, h3, h4,
 .hero-meta {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 0.6rem 1.4rem;
   margin: 1.5rem 0 0;
   font-family: var(--font-mono);
@@ -287,73 +339,6 @@ h1, h2, h3, h4,
   height: 5px;
   border-radius: 50%;
   background: var(--primary-color);
-}
-
-/* --- signature visual: chrome emblem over shader gradient --- */
-.hero-visual {
-  position: relative;
-  aspect-ratio: 5 / 4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border-color);
-  border-radius: 18px;
-  overflow: hidden;
-  background: linear-gradient(160deg, #0d0d0d, #080808);
-  box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-/* Static fallback gradient — visible when the WebGL canvas is hidden */
-.hero-shader-fallback {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background:
-    radial-gradient(55% 50% at 25% 30%, rgba(204, 255, 0, 0.10), transparent 60%),
-    radial-gradient(50% 45% at 80% 70%, rgba(77, 238, 234, 0.07), transparent 65%),
-    radial-gradient(55% 50% at 50% 50%, rgba(118, 75, 162, 0.09), transparent 70%);
-}
-
-/* Animated WebGL shader gradient layer */
-.hero-shader {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-/* Chrome emblem — visually dominant, centered above the shader */
-.hero-emblem {
-  position: relative;
-  z-index: 2;
-  display: block;
-  width: 68%;
-  max-width: 260px;
-  height: auto;
-  margin: 0 auto;
-  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.5));
-  animation: wsEmblemFloat 6s ease-in-out infinite;
-}
-
-@keyframes wsEmblemFloat {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-5px); }
-}
-
-.hero-visual-label {
-  position: absolute;
-  left: 16px;
-  bottom: 13px;
-  z-index: 3;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: rgba(229, 229, 229, 0.7);
 }
 
 /* ==========================================================
@@ -877,13 +862,9 @@ h1, h2, h3, h4,
    10. RESPONSIVE
    ========================================================== */
 @media (max-width: 900px) {
-  .hero-inner {
-    grid-template-columns: 1fr;
-    gap: 2rem;
-  }
-
-  .hero-visual {
-    aspect-ratio: 16 / 10;
+  .hero-emblem-large {
+    width: clamp(260px, 50vw, 400px);
+    opacity: 0.12;
   }
 }
 
@@ -932,10 +913,6 @@ h1, h2, h3, h4,
    11. REDUCED MOTION
    ========================================================== */
 @media (prefers-reduced-motion: reduce) {
-  .hero-emblem {
-    animation: none;
-  }
-
   .beats-grid .product-card,
   .store-section .product-grid .product-card,
   .beats-grid .product-card .product-artwork img,

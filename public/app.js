@@ -493,7 +493,6 @@
     const sub = document.createElement("div");
     sub.className = "nav-drawer-sub";
     sub.innerHTML =
-      '<a href="index.html#about">About</a>' +
       '<a href="index.html#contact">Contact</a>';
     navMenu.appendChild(sub);
 

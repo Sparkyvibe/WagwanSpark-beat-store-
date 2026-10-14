@@ -41,8 +41,8 @@
     `;
 
     // Organic flowing gradient using fractal Brownian motion noise.
-    // Palette: deep charcoal base, subtle electric-lime, cyan and violet
-    // drifts — all kept low-intensity so the chrome emblem stays dominant.
+    // Palette: deep charcoal base, restrained silver, electric-lime, cyan
+    // and violet drifts — broad, slow, ambient atmosphere across the hero.
     const fragmentSrc = `
       precision mediump float;
       uniform float u_time;
@@ -66,7 +66,7 @@
       float fbm(vec2 p) {
         float v = 0.0;
         float a = 0.5;
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 5; i++) {
           v += a * noise(p);
           p *= 2.0;
           a *= 0.5;
@@ -76,23 +76,29 @@
 
       void main() {
         vec2 uv = gl_FragCoord.xy / u_resolution.xy;
-        vec2 p = uv * 3.0;
-        float t = u_time * 0.12;
+        vec2 p = uv * 2.5;
+        float t = u_time * 0.08;
 
-        float n1 = fbm(p + vec2(t, t * 0.5));
-        float n2 = fbm(p + vec2(-t * 0.7, t * 0.3) + n1);
+        float n1 = fbm(p + vec2(t, t * 0.4));
+        float n2 = fbm(p + vec2(-t * 0.5, t * 0.2) + n1);
 
-        vec3 base   = vec3(0.030, 0.030, 0.038);
-        vec3 lime   = vec3(0.80, 1.0, 0.0)  * 0.13;
-        vec3 cyan   = vec3(0.30, 0.93, 0.92) * 0.08;
-        vec3 violet = vec3(0.46, 0.29, 0.64) * 0.10;
+        vec3 base   = vec3(0.028, 0.028, 0.032);
+        vec3 lime   = vec3(0.80, 1.0, 0.0)   * 0.10;
+        vec3 cyan   = vec3(0.30, 0.93, 0.92) * 0.07;
+        vec3 violet = vec3(0.46, 0.29, 0.64) * 0.08;
+        vec3 silver = vec3(0.72, 0.72, 0.74) * 0.06;
 
         vec3 color = mix(base, lime, smoothstep(0.30, 0.70, n1));
         color = mix(color, cyan, smoothstep(0.40, 0.80, n2) * 0.5);
         color = mix(color, violet, smoothstep(0.20, 0.60, n1 * n2) * 0.35);
+        color = mix(color, silver, smoothstep(0.55, 0.85, n2) * 0.25);
 
-        float vignette = 1.0 - length(uv - 0.5) * 0.75;
+        float vignette = 1.0 - length(uv - 0.5) * 0.65;
         color *= clamp(vignette, 0.0, 1.0);
+
+        // Bottom fade: blend into the page background
+        float bottomFade = smoothstep(0.0, 0.18, uv.y);
+        color = mix(vec3(0.027, 0.027, 0.027), color, bottomFade);
 
         gl_FragColor = vec4(color, 1.0);
       }
