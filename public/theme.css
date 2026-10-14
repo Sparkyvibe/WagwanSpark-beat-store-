@@ -132,6 +132,19 @@ h1, h2, h3, h4,
   border-bottom: 1px solid var(--border-color);
 }
 
+/* Bottom gradient blending into the beats section */
+.hero::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  z-index: 2;
+  background: linear-gradient(180deg, transparent, var(--secondary-color));
+  pointer-events: none;
+}
+
 .hero::before {
   display: none;
 }
@@ -166,6 +179,12 @@ h1, h2, h3, h4,
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  animation: emblemGlow 6s ease-in-out infinite;
+}
+
+@keyframes emblemGlow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.78; }
 }
 
 .hero-emblem-large {
@@ -173,7 +192,7 @@ h1, h2, h3, h4,
   height: auto;
   max-height: 90%;
   opacity: 0.15;
-  filter: blur(0.5px);
+  filter: blur(0.5px) drop-shadow(0 0 40px rgba(204, 255, 0, 0.04));
 }
 
 /* Hero content layered over the emblem */
@@ -187,15 +206,29 @@ h1, h2, h3, h4,
   width: 100%;
   max-width: 640px;
   margin: 0 auto;
+  animation: heroFadeUp 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes heroFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Subtle dark scrim behind the text for readability over the emblem */
 .hero-inner::before {
   content: "";
   position: absolute;
-  inset: -15% -25%;
+  inset: -20% -30%;
   z-index: -1;
-  background: radial-gradient(ellipse 55% 60% at center, rgba(8, 8, 8, 0.65), transparent 75%);
+  background:
+    radial-gradient(ellipse 50% 55% at center, rgba(8, 8, 8, 0.72), transparent 72%),
+    radial-gradient(ellipse 70% 40% at 50% 60%, rgba(8, 8, 8, 0.4), transparent 80%);
   pointer-events: none;
 }
 
@@ -863,8 +896,9 @@ h1, h2, h3, h4,
    ========================================================== */
 @media (max-width: 900px) {
   .hero-emblem-large {
-    width: clamp(260px, 50vw, 400px);
-    opacity: 0.12;
+    width: clamp(240px, 48vw, 380px);
+    opacity: 0.13;
+    filter: blur(0.5px) drop-shadow(0 0 30px rgba(204, 255, 0, 0.03));
   }
 }
 
@@ -925,5 +959,10 @@ h1, h2, h3, h4,
   .beats-grid .product-card:hover .product-artwork img,
   .store-section .product-grid .product-card:hover .product-artwork img {
     transform: none;
+  }
+
+  .hero-inner,
+  .hero-emblem-bg {
+    animation: none;
   }
 }

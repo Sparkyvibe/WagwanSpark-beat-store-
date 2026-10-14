@@ -15,7 +15,7 @@
     <!-- Shared cart drawer styling (same file samples.html and studio-tools.html load) -->
     <link rel="stylesheet" href="cart.css?v=1">
     <!-- Sonic Kinetics redesign layer (loads last, overrides the base sheets) -->
-    <link rel="stylesheet" href="theme.css?v=2">
+    <link rel="stylesheet" href="theme.css?v=3">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
@@ -58,40 +58,59 @@
         <div class="hero-emblem-bg" aria-hidden="true">
             <svg class="hero-emblem-large" viewBox="0 0 200 200" focusable="false">
                 <defs>
-                    <!-- Polished chrome for the bolt: vertical metallic sheen -->
-                    <linearGradient id="emblemChrome" x1="0.2" y1="0" x2="0.8" y2="1">
-                        <stop offset="0%" stop-color="#f5f5f5"/>
-                        <stop offset="12%" stop-color="#e2e2e2"/>
-                        <stop offset="30%" stop-color="#fafafa"/>
-                        <stop offset="48%" stop-color="#c0c0c0"/>
-                        <stop offset="68%" stop-color="#9a9a9a"/>
-                        <stop offset="85%" stop-color="#757575"/>
-                        <stop offset="100%" stop-color="#5a5a5a"/>
+                    <!-- Polished chrome for the bolt: refined vertical metallic sheen -->
+                    <linearGradient id="emblemChrome" x1="0.15" y1="0" x2="0.85" y2="1">
+                        <stop offset="0%" stop-color="#fafafa"/>
+                        <stop offset="8%" stop-color="#e8e8e8"/>
+                        <stop offset="22%" stop-color="#f6f6f6"/>
+                        <stop offset="36%" stop-color="#d0d0d0"/>
+                        <stop offset="50%" stop-color="#b4b4b4"/>
+                        <stop offset="64%" stop-color="#9c9c9c"/>
+                        <stop offset="78%" stop-color="#828282"/>
+                        <stop offset="90%" stop-color="#6a6a6a"/>
+                        <stop offset="100%" stop-color="#4e4e4e"/>
                     </linearGradient>
-                    <!-- Horizontal reflection band across the bolt -->
-                    <linearGradient id="emblemSheen" x1="0" y1="0.35" x2="0" y2="0.55">
+                    <!-- Horizontal reflection band — brighter, narrower -->
+                    <linearGradient id="emblemSheen" x1="0" y1="0.32" x2="0" y2="0.52">
                         <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
-                        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.35"/>
+                        <stop offset="45%" stop-color="#ffffff" stop-opacity="0.42"/>
+                        <stop offset="55%" stop-color="#ffffff" stop-opacity="0.42"/>
                         <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
                     </linearGradient>
-                    <!-- Machined chrome ring -->
+                    <!-- Machined chrome ring with more metallic variation -->
                     <linearGradient id="emblemRing" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stop-color="#f0f0f0"/>
-                        <stop offset="25%" stop-color="#b8b8b8"/>
-                        <stop offset="50%" stop-color="#e8e8e8"/>
-                        <stop offset="75%" stop-color="#909090"/>
-                        <stop offset="100%" stop-color="#d0d0d0"/>
+                        <stop offset="0%" stop-color="#f4f4f4"/>
+                        <stop offset="15%" stop-color="#c8c8c8"/>
+                        <stop offset="30%" stop-color="#eaeaea"/>
+                        <stop offset="50%" stop-color="#9a9a9a"/>
+                        <stop offset="70%" stop-color="#dcdcdc"/>
+                        <stop offset="85%" stop-color="#848484"/>
+                        <stop offset="100%" stop-color="#c0c0c0"/>
                     </linearGradient>
-                    <!-- Subtle electric-lime reflection -->
+                    <!-- Outer ring: darker machined edge -->
+                    <linearGradient id="emblemRingOuter" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#6a6a6a"/>
+                        <stop offset="50%" stop-color="#3a3a3a"/>
+                        <stop offset="100%" stop-color="#5a5a5a"/>
+                    </linearGradient>
+                    <!-- Subtle electric-lime reflection on the bolt -->
                     <linearGradient id="emblemLime" x1="0.5" y1="1" x2="0.5" y2="0">
                         <stop offset="0%" stop-color="#ccff00" stop-opacity="0"/>
-                        <stop offset="42%" stop-color="#ccff00" stop-opacity="0.10"/>
-                        <stop offset="55%" stop-color="#ccff00" stop-opacity="0.16"/>
+                        <stop offset="38%" stop-color="#ccff00" stop-opacity="0.08"/>
+                        <stop offset="52%" stop-color="#ccff00" stop-opacity="0.18"/>
+                        <stop offset="62%" stop-color="#ccff00" stop-opacity="0.06"/>
                         <stop offset="100%" stop-color="#ccff00" stop-opacity="0"/>
+                    </linearGradient>
+                    <!-- Inner bolt shadow for depth -->
+                    <linearGradient id="emblemBoltShadow" x1="0.5" y1="0" x2="0.5" y2="1">
+                        <stop offset="0%" stop-color="#000000" stop-opacity="0.18"/>
+                        <stop offset="40%" stop-color="#000000" stop-opacity="0"/>
+                        <stop offset="100%" stop-color="#000000" stop-opacity="0.22"/>
                     </linearGradient>
                     <!-- Soft ambient glow -->
                     <radialGradient id="emblemGlow" cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stop-color="#ccff00" stop-opacity="0.06"/>
+                        <stop offset="0%" stop-color="#ccff00" stop-opacity="0.07"/>
+                        <stop offset="60%" stop-color="#ccff00" stop-opacity="0.02"/>
                         <stop offset="100%" stop-color="#ccff00" stop-opacity="0"/>
                     </radialGradient>
                 </defs>
@@ -100,33 +119,51 @@
                 <circle cx="100" cy="100" r="95" fill="url(#emblemGlow)"/>
 
                 <!-- Concentric spark arcs behind the bolt -->
-                <g fill="none" stroke="#404040" stroke-linecap="round">
+                <g fill="none" stroke="#3a3a3a" stroke-linecap="round">
                     <path d="M 133 123 A 40 40 0 0 1 123 67"
-                        stroke-width="2" opacity="0.65"/>
+                        stroke-width="2" opacity="0.6"/>
                     <path d="M 145 132 A 55 55 0 0 1 132 55"
-                        stroke-width="2.5" opacity="0.50"/>
+                        stroke-width="2.5" opacity="0.45"/>
                     <path d="M 157 140 A 70 70 0 0 1 140 43"
-                        stroke-width="3" opacity="0.38"/>
+                        stroke-width="3" opacity="0.32"/>
                 </g>
 
+                <!-- Outer dark machined ring edge -->
+                <circle cx="100" cy="100" r="87" fill="none"
+                    stroke="url(#emblemRingOuter)" stroke-width="2"/>
                 <!-- Chrome ring -->
                 <circle cx="100" cy="100" r="84" fill="none"
                     stroke="url(#emblemRing)" stroke-width="3.5"/>
                 <!-- Inner ring micro-highlight -->
                 <circle cx="100" cy="100" r="84" fill="none"
                     stroke="#ffffff" stroke-width="0.5"
-                    stroke-opacity="0.25" stroke-dasharray="1.5 5"/>
+                    stroke-opacity="0.28" stroke-dasharray="1.5 5"/>
+                <!-- Tick marks around the ring -->
+                <g stroke="#505050" stroke-width="1" opacity="0.4">
+                    <line x1="100" y1="10" x2="100" y2="16"/>
+                    <line x1="100" y1="184" x2="100" y2="190"/>
+                    <line x1="10" y1="100" x2="16" y2="100"/>
+                    <line x1="184" y1="100" x2="190" y2="100"/>
+                    <line x1="36" y1="36" x2="41" y2="41"/>
+                    <line x1="159" y1="159" x2="164" y2="164"/>
+                    <line x1="36" y1="164" x2="41" y2="159"/>
+                    <line x1="159" y1="41" x2="164" y2="36"/>
+                </g>
 
-                <!-- Lightning bolt: chrome base + sheen + lime reflection -->
+                <!-- Lightning bolt: chrome base + sheen + lime + shadow -->
                 <path d="M 116 28 L 74 112 L 98 112 L 84 172 L 126 88 L 102 88 Z"
                     fill="url(#emblemChrome)"/>
+                <path d="M 116 28 L 74 112 L 98 112 L 84 172 L 126 88 L 102 88 Z"
+                    fill="url(#emblemBoltShadow)"/>
                 <path d="M 116 28 L 74 112 L 98 112 L 84 172 L 126 88 L 102 88 Z"
                     fill="url(#emblemSheen)"/>
                 <path d="M 116 28 L 74 112 L 98 112 L 84 172 L 126 88 L 102 88 Z"
                     fill="url(#emblemLime)"/>
-                <!-- Edge highlight on the bolt's upper-left -->
+                <!-- Edge highlights on the bolt -->
                 <path d="M 116 28 L 74 112" stroke="#ffffff"
-                    stroke-width="0.7" stroke-opacity="0.55" fill="none"/>
+                    stroke-width="0.8" stroke-opacity="0.6" fill="none"/>
+                <path d="M 84 172 L 126 88" stroke="#ffffff"
+                    stroke-width="0.5" stroke-opacity="0.3" fill="none"/>
             </svg>
         </div>
 
@@ -394,7 +431,7 @@
 
     <!-- PAYSTACK AND STORE SCRIPT -->
     <script src="https://js.paystack.co/v2/inline.js"></script>
-    <script src="shader-gradient.js?v=2"></script>
+    <script src="shader-gradient.js?v=3"></script>
     <script src="app.js?v=13"></script>
 
     <script>
