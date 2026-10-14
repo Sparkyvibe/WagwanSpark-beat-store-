@@ -531,8 +531,12 @@
   }
 
   function configureNavigation() {
+    // On /beat/<id> pages, relative paths resolve under /beat/ and break.
+    const prefix =
+      window.location.pathname.startsWith("/beat/") ? "/" : "";
+
     $$(".navbar-logo").forEach(link => {
-      link.href = "index.html";
+      link.href = prefix + "index.html";
     });
 
     $$("a.nav-link, .footer-navigation a").forEach(link => {
@@ -540,25 +544,25 @@
 
       if (label === "home" || label === "beats") {
         link.href = label === "home"
-          ? "index.html"
-          : "index.html#beats";
+          ? prefix + "index.html"
+          : prefix + "index.html#beats";
       } else if (label === "samples") {
-        link.href = "samples.html";
+        link.href = prefix + "samples.html";
       } else if (
         label === "studio tools" ||
         label === "studio-tools"
       ) {
-        link.href = "studio-tools.html";
+        link.href = prefix + "studio-tools.html";
       } else if (label === "about") {
-        link.href = "index.html#about";
+        link.href = prefix + "index.html#about";
       } else if (label === "contact") {
-        link.href = "index.html#contact";
+        link.href = prefix + "index.html#contact";
       }
     });
 
     $$("a[href='#beats']").forEach(link => {
       if (CURRENT_PAGE !== "beats") {
-        link.href = "index.html#beats";
+        link.href = prefix + "index.html#beats";
       }
     });
 
@@ -858,6 +862,20 @@
                   : '<i class="fas fa-cart-plus" aria-hidden="true"></i> Add to Cart'
               }
             </button>
+            ${
+              category === "beats"
+                ? `<button
+              type="button"
+              class="btn product-share-btn"
+              data-action="share"
+              data-id="${escapeHtml(product.id)}"
+              data-category="${escapeHtml(category)}"
+              aria-label="Share ${escapeHtml(product.title)}"
+            >
+              <i class="fas fa-share-alt" aria-hidden="true"></i> Share
+            </button>`
+                : ""
+            }
           </div>
         </div>
       </article>`;
@@ -965,9 +983,16 @@
   }
 
   function findProduct(id, category) {
-    return (state.products[category] || []).find(
+    const product = (state.products[category] || []).find(
       product => product.id === id
     );
+    if (product) return product;
+    // Beat detail page: the product may not be in the loaded catalogue
+    const detail = window.__wagwanspark_detail_product;
+    if (detail && detail.id === id && detail.category === category) {
+      return detail;
+    }
+    return undefined;
   }
 
   function saveCart() {
@@ -1403,6 +1428,68 @@
     });
   }
 
+  async function shareBeat(product) {
+    if (!product) return;
+
+    const shareUrl =
+      `${window.location.origin}/beat/${encodeURIComponent(product.id)}`;
+
+    const shareData = {
+      title: `${product.title} — WagwanSpark`,
+      text: `Check out "${product.title}" on WagwanSpark Sound Lab.`,
+      url: shareUrl
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          await copyLink(shareUrl);
+        }
+      }
+    } else {
+      await copyLink(shareUrl);
+    }
+  }
+
+  async function copyLink(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Link copied to clipboard!");
+    } catch {
+      const input = document.createElement("input");
+      input.value = url;
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      try {
+        document.execCommand("copy");
+        showToast("Link copied to clipboard!");
+      } catch {
+        showToast("Copy this link: " + url);
+      }
+      document.body.removeChild(input);
+    }
+  }
+
+  function showToast(message) {
+    let toast = document.getElementById("wagwanspark-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "wagwanspark-toast";
+      toast.className = "wagwanspark-toast";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add("visible");
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.classList.remove("visible");
+    }, 2500);
+  }
+
   function updatePlayButton() {
     const audio = document.getElementById("audioPlayer");
     const button = document.getElementById("playPauseBtn");
@@ -1556,6 +1643,8 @@
 
         if (product && actionButton.dataset.action === "add") {
           addToCart(product, true);
+        } else if (product && actionButton.dataset.action === "share") {
+          shareBeat(product);
         }
 
         return;
@@ -1763,6 +1852,11 @@
         closeCart();
         closePreview();
       }
+    });
+
+    // Beat detail page: update cart button state after the beat loads
+    window.addEventListener("wagwanspark:detail-ready", () => {
+      renderCart();
     });
   }
 

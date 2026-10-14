@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beat — WagwanSpark Sound Lab</title>
+    <meta name="description" content="Listen to and purchase this beat from WagwanSpark Sound Lab.">
+    <meta name="theme-color" content="#0a0a0a">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/styles.css?v=3">
+    <link rel="stylesheet" href="/cart.css?v=1">
+    <link rel="stylesheet" href="/theme.css?v=3">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <!-- NAVIGATION -->
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/index.html" class="navbar-logo">
+                <i class="fas fa-music"></i>
+                <span>WagwanSpark</span>
+            </a>
+
+            <div class="navbar-toggle" id="navbarToggle" aria-label="Toggle navigation" aria-expanded="false" role="button" tabindex="0">
+                <i class="fas fa-bars"></i>
+            </div>
+
+            <ul class="nav-menu" id="navMenu">
+                <li><a href="/index.html" class="nav-link">Home</a></li>
+                <li><a href="/index.html#beats" class="nav-link">Beats</a></li>
+                <li><a href="/samples.html" class="nav-link">Samples</a></li>
+                <li><a href="/studio-tools.html" class="nav-link">Studio Tools</a></li>
+            </ul>
+
+            <button type="button" class="cart-toggle" id="cartToggle" aria-label="Open shopping cart" aria-controls="cartDrawer" aria-expanded="false">
+                <i class="fas fa-shopping-cart"></i>
+                <span class="cart-toggle-text">Cart</span>
+                <span class="cart-count" id="cartCount">0</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- BEAT DETAIL SECTION -->
+    <section class="beat-detail-section">
+        <div class="beat-detail-container">
+            <a href="/index.html#beats" class="back-link">
+                <i class="fas fa-arrow-left" aria-hidden="true"></i>
+                Back to Beats
+            </a>
+
+            <!-- Loading state -->
+            <div class="beat-detail-loading" id="beatDetailLoading">
+                <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+                <p>Loading beat…</p>
+            </div>
+
+            <!-- Content (shown after fetch) -->
+            <div class="beat-detail-content" id="beatDetailContent">
+                <div class="beat-detail-artwork-wrap">
+                    <div class="beat-detail-artwork product-card" data-previewable="false" id="beatDetailArtwork" data-product-id="" data-category="beats">
+                        <img src="" alt="" id="beatDetailArtworkImg" loading="eager"
+                            onerror="this.onerror=null;this.style.display='none';this.parentElement.classList.add('artwork-placeholder');">
+                        <span class="artwork-play-overlay" aria-hidden="true">
+                            <span class="artwork-play-icon">
+                                <i class="fas fa-play"></i>
+                            </span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="beat-detail-info">
+                    <p class="beat-detail-eyebrow">WagwanSpark Sound Lab</p>
+                    <h1 class="beat-detail-title" id="beatDetailTitle"></h1>
+                    <div class="beat-detail-meta" id="beatDetailMeta"></div>
+                    <p class="beat-detail-description" id="beatDetailDescription"></p>
+                    <p class="product-format" id="beatDetailFormat"></p>
+                    <div class="beat-detail-price-row">
+                        <strong class="product-price" id="beatDetailPrice"></strong>
+                    </div>
+                    <div class="product-actions" id="beatDetailActions"></div>
+                </div>
+            </div>
+
+            <!-- Not found state -->
+            <div class="beat-detail-not-found" id="beatDetailNotFound">
+                <i class="fas fa-music" aria-hidden="true"></i>
+                <h2>Beat not found</h2>
+                <p>This beat may have been removed or the link is incorrect.</p>
+                <a href="/index.html#beats" class="btn btn-primary" style="margin-top:1.5rem;">
+                    Browse All Beats
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="footer-content">
+            <a href="/index.html" class="navbar-logo footer-logo">
+                <i class="fas fa-music"></i>
+                <span>WagwanSpark</span>
+            </a>
+
+            <p class="footer-tagline">Let the vibe be your guide.</p>
+
+            <div class="footer-navigation">
+                <a href="/index.html#contact">Contact</a>
+                <a href="/index.html#beats">Beats</a>
+                <a href="/samples.html">Samples</a>
+                <a href="/studio-tools.html">Studio Tools</a>
+            </div>
+
+            <div class="social-links footer-social-links">
+                <a href="https://www.instagram.com/wagwanspark/" target="_blank" rel="noopener noreferrer" aria-label="WagwanSpark on Instagram" title="Instagram">
+                    <i class="fab fa-instagram"></i>
+                </a>
+                <a href="https://x.com/sparky_vibe" target="_blank" rel="noopener noreferrer" aria-label="WagwanSpark on X" title="X">
+                    <i class="fab fa-x-twitter"></i>
+                </a>
+                <a href="https://youtube.com/@wagwanspark" target="_blank" rel="noopener noreferrer" aria-label="WagwanSpark on YouTube" title="YouTube">
+                    <i class="fab fa-youtube"></i>
+                </a>
+            </div>
+
+            <p class="copyright">
+                &copy; <span id="currentYear"></span>
+                WagwanSpark. All rights reserved.
+            </p>
+        </div>
+    </footer>
+
+    <!-- CART OVERLAY -->
+    <div class="cart-overlay" id="cartOverlay" aria-hidden="true"></div>
+
+    <!-- CART DRAWER -->
+    <aside class="cart-drawer" id="cartDrawer" role="dialog" aria-modal="true" aria-labelledby="cartTitle" aria-hidden="true" tabindex="-1">
+        <div class="cart-header">
+            <div>
+                <p class="section-eyebrow">YOUR SELECTION</p>
+                <h2 id="cartTitle">Your Cart <span id="cartItemLabel">0 items</span></h2>
+            </div>
+
+            <button type="button" class="close-cart" id="closeCart" aria-label="Close shopping cart">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="cart-body">
+            <div class="cart-empty" id="cartEmpty">
+                <div class="cart-empty-icon">
+                    <i class="fas fa-shopping-basket"></i>
+                </div>
+                <h3>Your cart is empty</h3>
+                <p>Your next sound is waiting. Add a product to get started.</p>
+
+                <button type="button" class="btn btn-primary" id="continueShopping">
+                    Explore Beats
+                </button>
+            </div>
+
+            <div class="cart-items" id="cartItems"></div>
+        </div>
+
+        <div class="cart-summary" id="cartSummary" hidden>
+            <div class="cart-summary-row">
+                <span>Items</span>
+                <span id="cartSummaryCount">0</span>
+            </div>
+
+            <div class="cart-summary-row cart-total-row">
+                <span>Total</span>
+                <strong id="cartTotal">₦0</strong>
+            </div>
+
+            <button type="button" class="btn btn-primary checkout-btn" id="checkoutBtn">
+                Proceed to Checkout
+                <i class="fas fa-lock"></i>
+            </button>
+
+            <button type="button" class="btn btn-secondary" id="cartContinueShopping">
+                Continue Shopping
+            </button>
+
+            <p class="checkout-note">
+                Secure checkout powered by Paystack.
+            </p>
+        </div>
+    </aside>
+
+    <!-- MUSIC PLAYER -->
+    <div class="player-modal" id="playerModal">
+        <div class="player-content">
+            <button type="button" class="player-close" id="closePlayer" aria-label="Close music player">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <div class="player-artwork" id="playerArtwork">
+                <img src="" alt="Audio artwork" id="playerImage">
+            </div>
+
+            <div class="player-info">
+                <h3 id="playerTitle">Beat Title</h3>
+                <p id="playerGenre">Genre</p>
+            </div>
+
+            <div class="player-controls">
+                <button type="button" id="playPauseBtn" aria-label="Play or pause preview">
+                    <i class="fas fa-play"></i>
+                </button>
+            </div>
+
+            <div class="player-progress-container">
+                <span id="currentTime">0:00</span>
+                <input type="range" id="progressBar" min="0" max="100" value="0" aria-label="Audio progress">
+                <span id="duration">0:00</span>
+            </div>
+
+            <audio id="audioPlayer" preload="none"></audio>
+        </div>
+    </div>
+
+    <!-- PAYSTACK AND STORE SCRIPT -->
+    <script src="https://js.paystack.co/v2/inline.js"></script>
+    <script src="/app.js?v=14"></script>
+
+    <script>
+        (async function () {
+            "use strict";
+
+            var path = window.location.pathname;
+            var match = path.match(/^\/beat\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+            var beatId = match ? match[1] : new URLSearchParams(window.location.search).get("id");
+
+            if (!beatId) {
+                showNotFound();
+            } else {
+                try {
+                    var response = await fetch("/api/beats/" + encodeURIComponent(beatId));
+                    if (!response.ok) {
+                        showNotFound();
+                    } else {
+                        var data = await response.json();
+                        renderBeatDetail(data);
+                    }
+                } catch (err) {
+                    showNotFound();
+                }
+            }
+
+            function money(value) {
+                return new Intl.NumberFormat("en-NG", {
+                    style: "currency",
+                    currency: "NGN",
+                    maximumFractionDigits: 0
+                }).format(Number(value) || 0);
+            }
+
+            function renderBeatDetail(data) {
+                var product = {
+                    id: data.id,
+                    title: data.title || data.id,
+                    category: (data.category || "beats").toLowerCase(),
+                    genre: data.genre || "Beat",
+                    description: data.description || "",
+                    price: data.price || 0,
+                    bpm: data.bpm || null,
+                    musical_key: data.musical_key || "",
+                    status: data.status || "published",
+                    artwork: data.artwork || "",
+                    previewAudio: data.previewAudio || "",
+                    formats: data.formats || ["MP3", "WAV"]
+                };
+
+                // Expose for app.js cart/preview/share handlers
+                window.__wagwanspark_detail_product = product;
+
+                document.title = product.title + " — WagwanSpark Sound Lab";
+
+                // Artwork
+                var artworkEl = document.getElementById("beatDetailArtwork");
+                var artworkImg = document.getElementById("beatDetailArtworkImg");
+                if (product.artwork) {
+                    artworkImg.src = product.artwork;
+                    artworkImg.alt = product.title + " artwork";
+                }
+                artworkEl.setAttribute("data-product-id", product.id);
+                artworkEl.setAttribute("data-category", product.category);
+                var playable = Boolean(product.previewAudio);
+                artworkEl.setAttribute("data-previewable", playable ? "true" : "false");
+                if (playable) {
+                    artworkEl.classList.add("product-card-playable");
+                }
+
+                // Title
+                document.getElementById("beatDetailTitle").textContent = product.title;
+
+                // Meta badges
+                var meta = document.getElementById("beatDetailMeta");
+                var badges = [];
+                if (product.genre) {
+                    badges.push('<span><i class="fas fa-music"></i> ' + product.genre + "</span>");
+                }
+                if (product.bpm) {
+                    badges.push('<span><i class="fas fa-tachometer-alt"></i> ' + product.bpm + " BPM</span>");
+                }
+                if (product.musical_key) {
+                    badges.push('<span><i class="fas fa-key"></i> ' + product.musical_key + "</span>");
+                }
+                meta.innerHTML = badges.join("");
+
+                // Description
+                var desc = document.getElementById("beatDetailDescription");
+                if (product.description) {
+                    desc.textContent = product.description;
+                } else {
+                    desc.style.display = "none";
+                }
+
+                // Format
+                document.getElementById("beatDetailFormat").innerHTML =
+                    '<i class="fas fa-file-audio"></i> MP3 <span class="format-separator">+</span> WAV';
+
+                // Price
+                document.getElementById("beatDetailPrice").textContent = money(product.price);
+
+                // Actions
+                document.getElementById("beatDetailActions").innerHTML =
+                    '<button type="button" class="btn btn-primary product-add-btn"' +
+                    ' data-action="add" data-id="' + product.id + '" data-category="' + product.category + '">' +
+                    '<i class="fas fa-cart-plus" aria-hidden="true"></i> Add to Cart' +
+                    "</button>" +
+                    '<button type="button" class="btn product-share-btn"' +
+                    ' data-action="share" data-id="' + product.id + '" data-category="' + product.category + '">' +
+                    '<i class="fas fa-share-alt" aria-hidden="true"></i> Share Beat' +
+                    "</button>";
+
+                // Show content, hide loading
+                document.getElementById("beatDetailLoading").style.display = "none";
+                document.getElementById("beatDetailContent").style.display = "flex";
+
+                // Let app.js update the cart button state
+                window.dispatchEvent(new CustomEvent("wagwanspark:detail-ready"));
+            }
+
+            function showNotFound() {
+                document.getElementById("beatDetailLoading").style.display = "none";
+                document.getElementById("beatDetailNotFound").style.display = "flex";
+            }
+        })();
+    </script>
+</body>
+</html>

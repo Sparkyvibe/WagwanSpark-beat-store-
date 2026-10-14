@@ -1095,6 +1095,30 @@ export default {
         return json({ error: "Catalogue unavailable." }, 500);
       }
     }
+    // Single beat for individual product pages.
+    const singleBeatMatch = path.match(/^\/api\/beats\/([a-z0-9-]+)$/);
+    if (singleBeatMatch && request.method === "GET") {
+      try {
+        const product = await getProduct(env, singleBeatMatch[1]);
+        if (!product || product.status !== "published") {
+          return json({ error: "Beat not found." }, 404);
+        }
+        return json({
+          ...product,
+          artwork: product.artwork_key
+            ? `/api/media/${encodeURIComponent(product.id)}/artwork`
+            : "",
+          previewAudio: product.preview_key
+            ? `/api/media/${encodeURIComponent(product.id)}/preview`
+            : "",
+          formats: ["MP3", "WAV"],
+          available: true
+        });
+      } catch (error) {
+        console.error("Single beat error:", error);
+        return json({ error: "Beat unavailable." }, 500);
+      }
+    }
     // Public catalogues for Beats, Samples, and Studio Tools.
     if (path === "/api/products" && request.method === "GET") {
       const category = validCategory(url.searchParams.get("category") || "");
@@ -1360,6 +1384,15 @@ export default {
           status: 500
         });
       }
+    }
+    // Individual beat pages: /beat/<id> serves beat.html.
+    // The ASSETS binding redirects /beat.html → /beat, so fetch /beat
+    // directly (the extensionless URL serves the same file).
+    const beatPageMatch = path.match(/^\/beat\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+    if (beatPageMatch && request.method === "GET") {
+      const assetUrl = new URL(request.url);
+      assetUrl.pathname = "/beat";
+      return env.ASSETS.fetch(new Request(assetUrl, request));
     }
     return env.ASSETS.fetch(request);
   }
