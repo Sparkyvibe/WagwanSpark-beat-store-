@@ -1088,3 +1088,54 @@ h1, h2, h3, h4,
     font-size: 0.8rem;
   }
 }
+
+/* ==========================================================
+   HERO POLISH
+   Paste at the very bottom of theme.css (it must load last).
+   Parts 1 and 2 are the fixes you asked for.
+   Parts 3 and 4 are optional: delete them if you like the
+   brightness as it is.
+   ========================================================== */
+
+/* 1. EYEBROW — the same short line on BOTH sides of the text */
+.hero-eyebrow::after {
+  content: "";
+  width: 26px;
+  height: 1px;
+  margin-left: -0.22em; /* cancels the trailing letter-spacing so both gaps match */
+  background: var(--primary-color);
+}
+
+/* 2. HEADLINE — letters stop touching, edges get crisper
+      (slightly lighter weight, looser spacing, flat colour
+      instead of a gradient on the text) */
+.hero-title {
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  line-height: 1.05;
+}
+
+.hero-title em {
+  background: none;
+  -webkit-text-fill-color: #c9f31d;
+  color: #c9f31d;
+}
+
+/* 3. OPTIONAL — calmer lime everywhere (buttons, logo, badges).
+      Same electric feel, less glare. One line changes the whole site. */
+:root {
+  --gradient: linear-gradient(135deg, #d4ff33 0%, #c3f000 100%);
+}
+
+/* 4. OPTIONAL — white logo text with only the music note in lime,
+      so the lime is saved for buttons, prices and the headline accent */
+.navbar-logo {
+  background: none;
+  -webkit-text-fill-color: #f4f4f4;
+  color: #f4f4f4;
+}
+
+.navbar-logo i {
+  -webkit-text-fill-color: var(--primary-color);
+  color: var(--primary-color);
+}
