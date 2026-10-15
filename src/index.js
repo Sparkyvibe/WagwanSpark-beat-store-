@@ -8,7 +8,7 @@ const LEGACY_BEATS = {
   phenomenal: { title: "PHENOMENAL", price: 7000, candidates: ["beats/PHENOMENAL.zip", "PHENOMENAL.zip"] },
   serenade: { title: "SERENADE", price: 7000, candidates: ["beats/SERENADE.zip", "SERENADE.zip"] }
 };
-const CALLBACK_URL = "https://wagwanspark-beat-store.taiyeowoyemi.workers.dev/success.html";
+const CALLBACK_URL = "https://wagwanspark.com.ng/success.html";
 const DOWNLOAD_TOKEN_LIFETIME = 30 * 60 * 1000;
 const EMAIL_DOWNLOAD_TOKEN_LIFETIME = 7 * 24 * 60 * 60 * 1000;
 const ADMIN_SESSION_LIFETIME = 8 * 60 * 60 * 1000;
