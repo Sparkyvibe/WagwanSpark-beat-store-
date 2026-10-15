@@ -485,6 +485,30 @@
           height: 44px;
         }
       }
+
+      /* Playing artwork: a slow, seamless 5s zoom-and-drift loop.
+         Attached while a card's preview is loaded and only running while
+         its audio is audible, so pausing freezes it in place. Uses the
+         individual scale/translate properties so it composes with the
+         theme's hover transform. */
+      @keyframes wsArtworkZoomDrift {
+        0%, 100% { scale: 1; translate: 0 0; }
+        50% { scale: 1.045; translate: -1.2% -0.8%; }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .product-card.is-preview-active .product-artwork > img,
+        .beat-detail-artwork.is-preview-active > img {
+          animation: wsArtworkZoomDrift 5s cubic-bezier(.45,0,.55,1) infinite;
+          animation-play-state: paused;
+          will-change: scale, translate;
+        }
+
+        .product-card.is-preview-animating .product-artwork > img,
+        .beat-detail-artwork.is-preview-animating > img {
+          animation-play-state: running;
+        }
+      }
     `;
 
     document.head.appendChild(style);
@@ -981,6 +1005,8 @@
 
     const pagination = document.getElementById("pagination");
     if (pagination) pagination.innerHTML = "";
+
+    updateCardPlayIcons();
   }
 
   function renderProductCategory(category) {
@@ -1022,6 +1048,8 @@
               ? "No sample packs are available yet. Check back soon."
               : "No studio tools are available yet. Check back soon."
         }</p></div>`;
+
+    updateCardPlayIcons();
   }
 
   function findProduct(id, category) {
@@ -1460,7 +1488,19 @@
 
       const isPlaying = Boolean(isActive && audio && !audio.paused);
 
+      const isLoaded = Boolean(
+        isActive && audio && audio.currentSrc && !audio.ended
+      );
+
+      const isAudible = Boolean(
+        isPlaying &&
+        !audio.ended &&
+        audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
+      );
+
       card.classList.toggle("is-preview-playing", isPlaying);
+      card.classList.toggle("is-preview-active", isLoaded);
+      card.classList.toggle("is-preview-animating", isAudible);
 
       const icon = $(".artwork-play-icon i", card);
 
@@ -1823,6 +1863,8 @@
       audio.addEventListener("play", updatePlayButton);
       audio.addEventListener("pause", updatePlayButton);
       audio.addEventListener("ended", updatePlayButton);
+      audio.addEventListener("playing", updateCardPlayIcons);
+      audio.addEventListener("waiting", updateCardPlayIcons);
 
       audio.addEventListener("timeupdate", () => {
         const current = document.getElementById("currentTime");
