@@ -221,6 +221,15 @@
     .pill.category { color: #c5d4c8; background: #202922; }
     .pill.featured { color: #071008; background: var(--green); }
 
+    .featured-order .beat { padding: 12px 15px; }
+    .featured-position {
+      display: inline-block;
+      min-width: 26px;
+      margin-right: 8px;
+      color: var(--green);
+      font-weight: 800;
+    }
+
     .checkrow {
       display: flex;
       align-items: center;
@@ -467,6 +476,17 @@
 
         <section class="panel">
           <div class="panel-head">
+            <h2>Featured carousel order</h2>
+          </div>
+          <p class="hint">
+            Featured beats appear left to right in the "Selected for the Vibe"
+            carousel on the home page. Only published beats are shown to customers.
+          </p>
+          <div id="featuredOrderList" class="beat-list featured-order"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
             <h2>Product catalogue</h2>
             <button id="refreshBtn" class="button" type="button">Refresh</button>
           </div>
@@ -512,7 +532,7 @@
       function setBusy(value) {
         busy = value;
         document.querySelectorAll("button").forEach(button => {
-          button.disabled = value;
+          button.disabled = value || button.dataset.keepDisabled === "true";
         });
       }
 
@@ -597,12 +617,129 @@
       // Explains how featuring works and shows how many products are
       // currently pinned, so the top of the store does not get crowded.
       function updateFeaturedHint() {
-        const count = beats.filter(item => Number(item.featured) === 1).length;
+        const featured = beats.filter(item => Number(item.featured) === 1);
+        const beatCount = featured.filter(
+          item => (item.category || "beats") === "beats"
+        ).length;
 
         $("featuredHint").textContent =
-          "Featured products are pinned to the top of the store. " +
-          "Keep it to 1 or 2 so they stand out. " +
-          "Currently featured: " + count + ".";
+          "Featured beats appear in the \"Selected for the Vibe\" carousel on the home page " +
+          "(3 to 5 works best) and stay in the regular catalogue. " +
+          "Featured Samples and Studio Tools are pinned to the top of their pages. " +
+          "Currently featured: " + beatCount + " beat(s), " +
+          (featured.length - beatCount) + " other product(s).";
+      }
+
+      // Featured beats in carousel order: saved positions first, then any
+      // without a position in the store's own order (newest publish first).
+      function featuredBeatsInOrder() {
+        const position = item => {
+          const value = Number(item.featured_position);
+          return item.featured_position != null &&
+            Number.isInteger(value) && value > 0 ? value : Infinity;
+        };
+        const published = item => String(item.published_at || item.created_at || "");
+
+        return beats
+          .filter(item =>
+            Number(item.featured) === 1 && (item.category || "beats") === "beats"
+          )
+          .sort((a, b) =>
+            (position(a) - position(b)) ||
+            published(b).localeCompare(published(a)) ||
+            String(b.created_at || "").localeCompare(String(a.created_at || ""))
+          );
+      }
+
+      function renderFeaturedOrder() {
+        const list = $("featuredOrderList");
+        list.replaceChildren();
+
+        const ordered = featuredBeatsInOrder();
+
+        if (!ordered.length) {
+          const empty = document.createElement("p");
+          empty.className = "hint";
+          empty.textContent =
+            "No beats are featured, so the carousel is hidden. Use ★ Feature in the catalogue below.";
+          list.appendChild(empty);
+          return;
+        }
+
+        ordered.forEach((beat, index) => {
+          const row = document.createElement("div");
+          row.className = "beat";
+
+          const info = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "beat-title";
+
+          const number = document.createElement("span");
+          number.className = "featured-position";
+          number.textContent = String(index + 1);
+
+          title.append(number, document.createTextNode(beat.title || beat.id));
+
+          if (beat.status !== "published") {
+            const hidden = document.createElement("span");
+            hidden.className = "pill";
+            hidden.textContent = "Draft · not shown";
+            title.appendChild(hidden);
+          }
+
+          info.appendChild(title);
+
+          const actions = document.createElement("div");
+          actions.className = "beat-actions";
+
+          [
+            { label: "← Move Left", delta: -1, disabled: index === 0 },
+            { label: "Move Right →", delta: 1, disabled: index === ordered.length - 1 }
+          ].forEach(item => {
+            const button = document.createElement("button");
+            button.className = "button";
+            button.type = "button";
+            button.textContent = item.label;
+            button.disabled = busy || item.disabled;
+            if (item.disabled) button.dataset.keepDisabled = "true";
+            button.setAttribute(
+              "aria-label",
+              `${item.label.replace(/[←→]/g, "").trim()}: ${beat.title || beat.id}`
+            );
+            button.addEventListener("click", () => moveFeatured(beat.id, item.delta));
+            actions.appendChild(button);
+          });
+
+          row.append(info, actions);
+          list.appendChild(row);
+        });
+      }
+
+      async function moveFeatured(id, delta) {
+        if (busy) return;
+
+        const ids = featuredBeatsInOrder().map(item => item.id);
+        const from = ids.indexOf(id);
+        const to = from + delta;
+        if (from < 0 || to < 0 || to >= ids.length) return;
+
+        [ids[from], ids[to]] = [ids[to], ids[from]];
+
+        setBusy(true);
+
+        try {
+          await api("/api/admin/featured-order", {
+            method: "PUT",
+            body: JSON.stringify({ category: "beats", ids })
+          });
+          await loadBeats();
+          notice("Featured carousel order saved.", "success");
+        } catch (error) {
+          notice(error.message, "error");
+          await loadBeats();
+        } finally {
+          setBusy(false);
+        }
       }
 
       // Shows which files are already stored for the product being managed
@@ -852,6 +989,7 @@
           beats.filter(beat => beat.status !== "published").length;
 
         updateFeaturedHint();
+        renderFeaturedOrder();
 
         const list = $("beatList");
         list.replaceChildren();
@@ -948,12 +1086,16 @@
         const makeFeatured = Number(beat.featured) !== 1;
 
         if (makeFeatured) {
+          const category = beat.category || "beats";
           const already = beats.filter(
-            item => Number(item.featured) === 1
+            item =>
+              Number(item.featured) === 1 &&
+              (item.category || "beats") === category
           ).length;
+          const limit = category === "beats" ? 5 : 2;
 
-          if (already >= 2 && !confirm(
-            `${already} products are already featured. Featuring too many makes none of them stand out.\n\nFeature "${beat.title || beat.id}" anyway?`
+          if (already >= limit && !confirm(
+            `${already} ${CATEGORY_LABELS[category] || "products"} are already featured. Featuring too many makes none of them stand out.\n\nFeature "${beat.title || beat.id}" anyway?`
           )) {
             return;
           }
@@ -985,7 +1127,9 @@
 
           notice(
             makeFeatured
-              ? `"${beat.title || id}" is now featured and pinned to the top.`
+              ? (beat.category || "beats") === "beats"
+                ? `"${beat.title || id}" is now featured in the carousel (added at the end).`
+                : `"${beat.title || id}" is now featured and pinned to the top.`
               : `"${beat.title || id}" is no longer featured.`,
             "success"
           );

@@ -201,6 +201,25 @@
         </div>
     </section>
 
+    <!-- FEATURED BEATS CAROUSEL (filled and shown by app.js when beats are featured) -->
+    <section class="beats-section featured-carousel-section" id="featured" aria-labelledby="featuredTitle" hidden>
+        <div class="section-header">
+            <p class="section-subtitle">FEATURED</p>
+            <h2 id="featuredTitle">Selected for the <span>Vibe</span></h2>
+        </div>
+        <div class="featured-carousel-bar">
+            <div class="featured-carousel-nav" id="featuredCarouselNav" hidden>
+                <button type="button" class="featured-carousel-arrow" id="featuredPrev" aria-controls="featuredCarousel" aria-label="Previous featured beats">
+                    <i class="fas fa-chevron-left" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="featured-carousel-arrow" id="featuredNext" aria-controls="featuredCarousel" aria-label="Next featured beats">
+                    <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
+        <div class="beats-grid featured-carousel-track" id="featuredCarousel" role="region" aria-roledescription="carousel" aria-label="Featured beats" tabindex="0"></div>
+    </section>
+
     <!-- BEATS SECTION: MAIN STORE CATALOGUE -->
     <section class="beats-section" id="beats">
         <div class="section-header">
@@ -432,7 +451,7 @@
     <!-- PAYSTACK AND STORE SCRIPT -->
     <script src="https://js.paystack.co/v2/inline.js"></script>
     <script src="shader-gradient.js?v=3"></script>
-    <script src="app.js?v=15"></script>
+    <script src="app.js?v=16"></script>
 
     <script>
         /*
