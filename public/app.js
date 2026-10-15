@@ -1,4 +1,3 @@
-
 /*
  * WAGWANSPARK — MULTI-PAGE STOREFRONT
  * index.html        = Beats
@@ -7,6 +6,10 @@
  *
  * Separate catalogues, audio previews, shared cart and Paystack checkout.
  * Preserves existing API routes, checkout payload and storefront styling.
+ *
+ * Ranking: the worker returns products already sorted (featured first,
+ * then newest publish date). This file keeps that order and adds a
+ * "Featured" badge to pinned products.
  */
 (() => {
   "use strict";
@@ -301,6 +304,37 @@
         color: #101010;
         background: #ccff00;
         border-color: #ccff00;
+      }
+
+      /* Featured products: pinned to the top by the worker, and marked
+         with a lime badge plus a thin lime outline on the card. */
+      .product-card .product-artwork {
+        position: relative;
+      }
+
+      .product-card.is-featured {
+        box-shadow: 0 0 0 1px rgba(204,255,0,.5);
+      }
+
+      .product-featured-badge {
+        position: absolute;
+        left: 10px;
+        bottom: 10px;
+        z-index: 3;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #ccff00;
+        color: #101010;
+        font-size: .7rem;
+        font-weight: 800;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        line-height: 1.3;
+        pointer-events: none;
+        box-shadow: 0 2px 10px rgba(0,0,0,.35);
       }
 
       .product-meta {
@@ -760,6 +794,9 @@
     // Studio Tools such as FLP projects.
     const playable = Boolean(previewAudio);
 
+    // Featured products are pinned first by the worker; mark them visibly.
+    const featured = Number(product.featured) === 1;
+
     const metadata = [];
 
     if (product.genre) {
@@ -797,6 +834,10 @@
         </span>`
       : "";
 
+    const featuredBadge = featured
+      ? `<span class="product-featured-badge"><i class="fas fa-star" aria-hidden="true"></i> Featured</span>`
+      : "";
+
     const formatLabel =
       category === "beats"
         ? `
@@ -818,7 +859,7 @@
 
     return `
       <article
-        class="beat-card product-card${playable ? " product-card-playable" : ""}"
+        class="beat-card product-card${playable ? " product-card-playable" : ""}${featured ? " is-featured" : ""}"
         data-product-id="${escapeHtml(product.id)}"
         data-category="${escapeHtml(category)}"
         data-previewable="${playable ? "true" : "false"}"
@@ -833,6 +874,7 @@
           >
           ${playOverlay}
           <span class="product-category-label">${escapeHtml(categoryLabel(category))}</span>
+          ${featuredBadge}
         </div>
 
         <div class="beat-info product-info">
