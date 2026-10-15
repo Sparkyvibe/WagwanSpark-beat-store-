@@ -1,8 +1,10 @@
-// ==========================================
-// WAGWANSPARK — MULTI-CATEGORY STORE WORKER
-// Keeps existing beat routes and adds Samples + Studio Tools.
-// Adds authenticated Admin audio preview for draft and published products.
-// ==========================================
+
+ // ==========================================
+ // WAGWANSPARK — MULTI-CATEGORY STORE WORKER
+ // Keeps existing beat routes and adds Samples + Studio Tools.
+ // Adds authenticated Admin audio preview for draft and published products.
+ // Purchase email is triggered by both webhook and verified success-page fallback.
+ // ==========================================
 const LEGACY_BEATS = {
   "sun-fire": { title: "SUN FIRE", price: 7000, candidates: ["beats/SUN FIRE.zip", "SUN FIRE.zip"] },
   phenomenal: { title: "PHENOMENAL", price: 7000, candidates: ["beats/PHENOMENAL.zip", "PHENOMENAL.zip"] },
@@ -243,10 +245,6 @@ function mediaKeyCandidates(product, column) {
   const candidates = [];
   if (product[column]) candidates.push(product[column]);
   const category = product.category || "beats";
-  // Samples and Studio Tools are always uploaded through Admin, so their
-  // R2 keys are predictable. Only beats (and the legacy beat IDs) need the
-  // wide filename guessing below. This keeps a missing file from costing
-  // dozens of R2 lookups per request.
   const isLegacyStyle = category === "beats" || Boolean(LEGACY_BEATS[product.id]);
   if (!isLegacyStyle) {
     const id = String(product.id || "");
@@ -572,12 +570,97 @@ async function sendPurchaseEmail(env, email, reference, products, origin) {
   return true;
 }
 
+// ==========================================
+// SHARED EMAIL DELIVERY + DUPLICATE PROTECTION
+// Both the Paystack webhook and verified-payment route use this function.
+// A payment reference can be emailed successfully only once.
+// Failed or stale deliveries can be retried.
+// ==========================================
+async function deliverPurchaseEmailOnce(env, reference, email, products) {
+  if (!env.DB) {
+    throw new Error("Database binding is missing for email delivery.");
+  }
+
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS email_deliveries (
+    reference TEXT PRIMARY KEY,
+    recipient TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'processing',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sent_at TEXT
+  )`).run();
+
+  const inserted = await env.DB.prepare(
+    "INSERT OR IGNORE INTO email_deliveries (reference, recipient, status) VALUES (?, ?, 'processing')"
+  ).bind(reference, email).run();
+
+  const wasInserted = Number(inserted.meta?.changes || 0) > 0;
+
+  if (!wasInserted) {
+    const existing = await env.DB.prepare(
+      "SELECT reference, recipient, status, updated_at FROM email_deliveries WHERE reference = ?"
+    ).bind(reference).first();
+
+    if (existing?.status === "sent") {
+      return { sent: true, duplicate: true, processing: false };
+    }
+
+    if (!existing || existing.recipient !== email) {
+      throw new Error("Email delivery record mismatch.");
+    }
+
+    const updatedAt = existing.updated_at
+      ? Date.parse(`${existing.updated_at.replace(" ", "T")}Z`)
+      : NaN;
+
+    const stale = !Number.isFinite(updatedAt) ||
+      Date.now() - updatedAt > 5 * 60 * 1000;
+
+    if (existing.status === "processing" && !stale) {
+      return { sent: false, duplicate: false, processing: true };
+    }
+
+    const reclaimed = await env.DB.prepare(
+      "UPDATE email_deliveries SET recipient = ?, status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE reference = ? AND status != 'sent'"
+    ).bind(email, reference).run();
+
+    if (Number(reclaimed.meta?.changes || 0) < 1) {
+      const latest = await env.DB.prepare(
+        "SELECT status FROM email_deliveries WHERE reference = ?"
+      ).bind(reference).first();
+
+      if (latest?.status === "sent") {
+        return { sent: true, duplicate: true, processing: false };
+      }
+      throw new Error("Could not claim email delivery.");
+    }
+  }
+
+  try {
+    await sendPurchaseEmail(env, email, reference, products, STORE_ORIGIN);
+
+    await env.DB.prepare(
+      "UPDATE email_deliveries SET status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE reference = ?"
+    ).bind(reference).run();
+
+    return { sent: true, duplicate: false, processing: false };
+  } catch (error) {
+    await env.DB.prepare(
+      "UPDATE email_deliveries SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE reference = ? AND status != 'sent'"
+    ).bind(reference).run();
+
+    throw error;
+  }
+}
+
 async function handlePaystackWebhook(request, env, url) {
   if (!env.PAYSTACK_SECRET_KEY || !env.DB || !env.BEATS_BUCKET) {
     return json({ error: "Payment service is not configured." }, 500);
   }
+
   const rawBody = await request.text();
   const signature = request.headers.get("x-paystack-signature") || "";
+
   if (!(await verifyPaystackWebhookSignature(
     rawBody,
     signature,
@@ -585,21 +668,26 @@ async function handlePaystackWebhook(request, env, url) {
   ))) {
     return json({ error: "Invalid webhook signature." }, 401);
   }
+
   let event;
   try {
     event = JSON.parse(rawBody);
   } catch {
     return json({ error: "Invalid webhook payload." }, 400);
   }
+
   if (event.event !== "charge.success") {
     return json({ received: true, ignored: true });
   }
+
   const reference = event.data?.reference;
   if (typeof reference !== "string" || !reference || reference.length > 200) {
     return json({ error: "Invalid payment reference." }, 400);
   }
+
   try {
     const transaction = await verifyPaystackTransaction(reference, env);
+
     if (
       event.data?.reference !== transaction.reference ||
       Number(event.data?.amount) !== Number(transaction.amount) ||
@@ -607,56 +695,28 @@ async function handlePaystackWebhook(request, env, url) {
     ) {
       return json({ error: "Webhook and verified transaction do not match." }, 400);
     }
+
     const { products, email } = await getVerifiedPurchase(transaction, env);
-    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS email_deliveries (
-      reference TEXT PRIMARY KEY,
-      recipient TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'processing',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      sent_at TEXT
-    )`).run();
-    const inserted = await env.DB.prepare(
-      "INSERT OR IGNORE INTO email_deliveries (reference, recipient, status) VALUES (?, ?, 'processing')"
-    ).bind(reference, email).run();
-    const wasInserted = Number(inserted.meta?.changes || 0) > 0;
-    if (!wasInserted) {
-      const existing = await env.DB.prepare(
-        "SELECT reference, recipient, status, updated_at FROM email_deliveries WHERE reference = ?"
-      ).bind(reference).first();
-      if (existing?.status === "sent") {
-        return json({ received: true, emailSent: true, duplicate: true });
-      }
-      const updatedAt = existing?.updated_at
-        ? Date.parse(`${existing.updated_at.replace(" ", "T")}Z`)
-        : NaN;
-      const stale = !Number.isFinite(updatedAt) ||
-        Date.now() - updatedAt > 5 * 60 * 1000;
-      if (!existing || existing.recipient !== email) {
-        return json({ error: "Email delivery record mismatch." }, 500);
-      }
-      if (existing.status === "processing" && !stale) {
-        return json({ received: true, processing: true });
-      }
-      const reclaimed = await env.DB.prepare(
-        "UPDATE email_deliveries SET recipient = ?, status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE reference = ? AND status != 'sent'"
-      ).bind(email, reference).run();
-      if (Number(reclaimed.meta?.changes || 0) < 1) {
-        return json({ error: "Could not claim email delivery." }, 500);
-      }
-    }
+
     try {
-      await sendPurchaseEmail(env, email, reference, products, STORE_ORIGIN);
-      await env.DB.prepare(
-        "UPDATE email_deliveries SET status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE reference = ?"
-      ).bind(reference).run();
-      return json({ received: true, emailSent: true });
+      const delivery = await deliverPurchaseEmailOnce(
+        env,
+        reference,
+        email,
+        products
+      );
+
+      return json({
+        received: true,
+        emailSent: delivery.sent,
+        duplicate: delivery.duplicate,
+        processing: delivery.processing
+      });
     } catch (error) {
       console.error("Purchase email delivery failed:", error);
-      await env.DB.prepare(
-        "UPDATE email_deliveries SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE reference = ?"
-      ).bind(reference).run();
-      return json({ error: "Email delivery failed. Webhook retry is required." }, 500);
+      return json({
+        error: "Email delivery failed. Webhook retry is required."
+      }, 500);
     }
   } catch (error) {
     console.error("Paystack webhook processing failed:", error);
@@ -716,8 +776,7 @@ async function handleAdmin(request, env, url) {
     if (!session) return json({ authenticated: false }, 401);
     return json({ authenticated: true, csrfToken: session.csrf });
   }
-  // The preview endpoint is read-only, but still requires a valid Admin session.
-  // It intentionally allows draft products because it is for Admin preview only.
+
   const isAdminPreviewPath =
     /^\/api\/admin\/(?:beats|products)\/[a-z0-9-]+\/preview$/.test(path);
   const readOnly =
@@ -728,6 +787,7 @@ async function handleAdmin(request, env, url) {
     );
   const auth = await requireAdmin(request, env, !readOnly);
   if (auth.response) return auth.response;
+
   if (
     (path === "/api/admin/beats" || path === "/api/admin/products") &&
     request.method === "GET"
@@ -740,21 +800,19 @@ async function handleAdmin(request, env, url) {
       products: result.results || []
     });
   }
-  // ==========================================
-  // ADMIN AUDIO PREVIEW
-  // GET /api/admin/products/:id/preview
-  // GET /api/admin/beats/:id/preview
-  // Requires Admin session; works for drafts and published products.
-  // ==========================================
+
   const adminPreviewMatch = path.match(
     /^\/api\/admin\/(?:beats|products)\/([a-z0-9-]+)\/preview$/
   );
+
   if (adminPreviewMatch && request.method === "GET") {
     const id = adminPreviewMatch[1];
     const product = await getProduct(env, id);
+
     if (!product) {
       return json({ error: "Product not found." }, 404);
     }
+
     let key = product.preview_key;
     if (!key) {
       const recovered = await repairStoredFileKey(
@@ -770,6 +828,7 @@ async function handleAdmin(request, env, url) {
       }
       key = recovered.key;
     }
+
     let object;
     try {
       object = await env.BEATS_BUCKET.get(key);
@@ -777,6 +836,7 @@ async function handleAdmin(request, env, url) {
       console.error("Admin preview read failed:", { id, key, error });
       return json({ error: "Could not read preview audio from storage." }, 500);
     }
+
     if (!object) {
       const recovered = await repairStoredFileKey(
         env,
@@ -796,12 +856,15 @@ async function handleAdmin(request, env, url) {
         return json({ error: "Could not read preview audio from storage." }, 500);
       }
     }
+
     if (!object) {
       return json({ error: "Preview audio could not be found in storage." }, 404);
     }
+
     const headers = new Headers();
     object.writeHttpMetadata(headers);
     const storedType = headers.get("Content-Type") || "";
+
     if (!storedType.startsWith("audio/")) {
       const keyLower = key.toLowerCase();
       headers.set(
@@ -809,11 +872,13 @@ async function handleAdmin(request, env, url) {
         keyLower.endsWith(".wav") ? "audio/wav" : "audio/mpeg"
       );
     }
+
     headers.set("Cache-Control", "private, no-store");
     headers.set("X-Content-Type-Options", "nosniff");
     headers.set("Content-Disposition", "inline");
     return new Response(object.body, { status: 200, headers });
   }
+
   if (
     (path === "/api/admin/beats" || path === "/api/admin/products") &&
     request.method === "POST"
@@ -824,6 +889,7 @@ async function handleAdmin(request, env, url) {
     } catch {
       return json({ error: "Invalid request." }, 400);
     }
+
     const id = cleanText(data.id, 80).toLowerCase();
     const title = cleanText(data.title, 120);
     const genre = cleanText(data.genre || data.type || "Production Tools", 80);
@@ -833,11 +899,13 @@ async function handleAdmin(request, env, url) {
     const musicalKey = cleanText(data.musical_key ?? data.musicalKey, 40);
     const bpm = data.bpm === "" || data.bpm == null ? null : Number(data.bpm);
     const price = Number(data.price);
+
     if (!validId(id) || !title || !genre || !category) {
       return json({
         error: "Provide a valid ID, title, genre, and category (beats, samples, or studio-tools)."
       }, 400);
     }
+
     if (
       !Number.isSafeInteger(price) ||
       price < 1 ||
@@ -845,6 +913,7 @@ async function handleAdmin(request, env, url) {
     ) {
       return json({ error: "Check the price and BPM values." }, 400);
     }
+
     try {
       await env.DB.prepare(`INSERT INTO beats
         (id, title, genre, bpm, musical_key, price, description, status, featured, category, created_at, updated_at)
@@ -867,9 +936,11 @@ async function handleAdmin(request, env, url) {
       }
       throw error;
     }
+
     const created = await getProduct(env, id);
     return json({ success: true, beat: created, product: created }, 201);
   }
+
   if (path === "/api/admin/upload" && request.method === "POST") {
     let form;
     try {
@@ -877,23 +948,28 @@ async function handleAdmin(request, env, url) {
     } catch {
       return json({ error: "Could not read the uploaded file." }, 400);
     }
+
     const id = cleanText(
       form.get("beatId") || form.get("productId"),
       80
     ).toLowerCase();
     const kind = cleanText(form.get("kind"), 20).toLowerCase();
     const file = form.get("file");
+
     if (!validId(id) || !file || typeof file.arrayBuffer !== "function") {
       return json({ error: "Select a product and a file." }, 400);
     }
+
     const product = await getProduct(env, id);
     if (!product) return json({ error: "Product not found." }, 404);
+
     const category = product.category || "beats";
     const mime = (file.type || "").toLowerCase();
     let key;
     let column;
     let maxBytes;
     let contentType;
+
     if (kind === "artwork") {
       if (!["image/jpeg", "image/png", "image/webp"].includes(mime)) {
         return json({ error: "Artwork must be JPG, PNG, or WebP." }, 400);
@@ -945,12 +1021,14 @@ async function handleAdmin(request, env, url) {
     } else {
       return json({ error: "Unknown upload type." }, 400);
     }
+
     if (!file.size) {
       return json({ error: "The selected file is empty." }, 400);
     }
     if (file.size > maxBytes) {
       return json({ error: "File exceeds the size limit." }, 413);
     }
+
     try {
       await env.BEATS_BUCKET.put(
         key,
@@ -966,15 +1044,18 @@ async function handleAdmin(request, env, url) {
         error: "R2 could not save the uploaded file. Please try again."
       }, 500);
     }
+
     const stored = await env.BEATS_BUCKET.head(key);
     if (!stored) {
       return json({
         error: `Upload verification failed for ${key}. Please retry.`
       }, 500);
     }
+
     await env.DB.prepare(
       `UPDATE beats SET ${column} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).bind(key, id).run();
+
     const updated = await getProduct(env, id);
     return json({
       success: true,
@@ -984,19 +1065,23 @@ async function handleAdmin(request, env, url) {
       product: updated
     });
   }
+
   const match = path.match(
     /^\/api\/admin\/(?:beats|products)\/([a-z0-9-]+)$/
   );
+
   if (match && request.method === "PATCH") {
     const id = match[1];
     const existing = await getProduct(env, id);
     if (!existing) return json({ error: "Product not found." }, 404);
+
     let data;
     try {
       data = await request.json();
     } catch {
       return json({ error: "Invalid request." }, 400);
     }
+
     const title = cleanText(data.title, 120);
     const genre = cleanText(data.genre || data.type || existing.genre, 80);
     const description = cleanText(data.description, 2000);
@@ -1008,11 +1093,13 @@ async function handleAdmin(request, env, url) {
     );
     const featured = Number(data.featured) === 1 || data.featured === true ? 1 : 0;
     const status = data.status === "published" ? "published" : "draft";
+
     if (!title || !genre || !category) {
       return json({
         error: "Title, genre, and a valid category are required."
       }, 400);
     }
+
     if (
       !Number.isSafeInteger(price) ||
       price < 1 ||
@@ -1020,6 +1107,7 @@ async function handleAdmin(request, env, url) {
     ) {
       return json({ error: "Check the price and BPM values." }, 400);
     }
+
     if (status === "published") {
       const required = [
         { column: "artwork_key", label: "artwork" },
@@ -1031,6 +1119,7 @@ async function handleAdmin(request, env, url) {
           label: "preview audio"
         });
       }
+
       for (const item of required) {
         const found = await repairStoredFileKey(
           env,
@@ -1046,6 +1135,7 @@ async function handleAdmin(request, env, url) {
         }
       }
     }
+
     await env.DB.prepare(`UPDATE beats
       SET title = ?, genre = ?, bpm = ?, musical_key = ?, price = ?,
           description = ?, category = ?, status = ?, featured = ?,
@@ -1063,13 +1153,16 @@ async function handleAdmin(request, env, url) {
         featured,
         id
       ).run();
+
     const updated = await getProduct(env, id);
     return json({ success: true, beat: updated, product: updated });
   }
+
   if (match && request.method === "DELETE") {
     const id = match[1];
     const product = await getProduct(env, id);
     if (!product) return json({ error: "Product not found." }, 404);
+
     for (const key of [
       product.artwork_key,
       product.preview_key,
@@ -1077,9 +1170,11 @@ async function handleAdmin(request, env, url) {
     ]) {
       if (key) await env.BEATS_BUCKET.delete(key);
     }
+
     await env.DB.prepare("DELETE FROM beats WHERE id = ?").bind(id).run();
     return json({ success: true });
   }
+
   return json({ error: "Admin endpoint not found." }, 404);
 }
 
@@ -1090,6 +1185,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
+
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
@@ -1102,6 +1198,7 @@ export default {
         }
       });
     }
+
     if (path === "/api/paystack-webhook" && request.method === "POST") {
       try {
         return await handlePaystackWebhook(request, env, url);
@@ -1110,6 +1207,7 @@ export default {
         return json({ error: "Webhook handler failed." }, 500);
       }
     }
+
     if (path.startsWith("/api/admin/")) {
       try {
         return await handleAdmin(request, env, url);
@@ -1118,7 +1216,7 @@ export default {
         return json({ error: "Admin request failed." }, 500);
       }
     }
-    // Existing beat endpoint remains compatible with the storefront.
+
     if (path === "/api/beats" && request.method === "GET") {
       try {
         const beats = await getPublishedBeats(env);
@@ -1140,7 +1238,7 @@ export default {
         return json({ error: "Catalogue unavailable." }, 500);
       }
     }
-    // Single beat for individual product pages.
+
     const singleBeatMatch = path.match(/^\/api\/beats\/([a-z0-9-]+)$/);
     if (singleBeatMatch && request.method === "GET") {
       try {
@@ -1164,7 +1262,7 @@ export default {
         return json({ error: "Beat unavailable." }, 500);
       }
     }
-    // Public catalogues for Beats, Samples, and Studio Tools.
+
     if (path === "/api/products" && request.method === "GET") {
       const category = validCategory(url.searchParams.get("category") || "");
       if (!category) {
@@ -1191,21 +1289,23 @@ export default {
         return json({ error: "Catalogue unavailable." }, 500);
       }
     }
-    // Public artwork and preview audio are only served for published products.
-    // Private ZIP files are never exposed through this route.
+
     const mediaMatch = path.match(
       /^\/api\/media\/([a-z0-9-]+)\/(artwork|preview)$/
     );
+
     if (mediaMatch && request.method === "GET") {
       try {
         const product = await getProduct(env, mediaMatch[1]);
         if (!product || product.status !== "published") {
           return new Response("Not found.", { status: 404 });
         }
+
         const column = mediaMatch[2] === "artwork"
           ? "artwork_key"
           : "preview_key";
         let key = product[column];
+
         if (key) {
           const object = await env.BEATS_BUCKET.get(key);
           if (object) {
@@ -1216,12 +1316,15 @@ export default {
             return new Response(object.body, { headers });
           }
         }
+
         const recovered = await repairStoredFileKey(env, product, column);
         if (!recovered.found) {
           return new Response("Not found.", { status: 404 });
         }
+
         const object = await env.BEATS_BUCKET.get(recovered.key);
         if (!object) return new Response("Not found.", { status: 404 });
+
         const headers = new Headers();
         object.writeHttpMetadata(headers);
         headers.set("Cache-Control", "public, max-age=300");
@@ -1232,6 +1335,7 @@ export default {
         return new Response("Media unavailable.", { status: 500 });
       }
     }
+
     if (path === "/api/create-payment" && request.method === "POST") {
       try {
         if (!env.PAYSTACK_SECRET_KEY || !env.DB) {
@@ -1240,6 +1344,7 @@ export default {
             error: "Payment service is not configured."
           }, 500);
         }
+
         let data;
         try {
           data = await request.json();
@@ -1249,9 +1354,11 @@ export default {
             error: "Invalid request data."
           }, 400);
         }
+
         const email = typeof data.email === "string"
           ? data.email.trim()
           : "";
+
         if (
           !email ||
           email.length > 254 ||
@@ -1262,13 +1369,16 @@ export default {
             error: "Please enter a valid email address."
           }, 400);
         }
+
         const selection = await getRequestedProducts(data, env);
         if (selection.error) {
           return json({ status: false, error: selection.error }, 400);
         }
+
         const { products, total } = selection;
         const ids = products.map(item => item.id);
         const titles = products.map(item => item.title);
+
         const response = await fetch(
           "https://api.paystack.co/transaction/initialize",
           {
@@ -1298,7 +1408,9 @@ export default {
             })
           }
         );
+
         const result = await response.json();
+
         if (
           !response.ok ||
           !result.status ||
@@ -1311,6 +1423,7 @@ export default {
             error: result.message || "Unable to initialize payment."
           }, 502);
         }
+
         return json(result);
       } catch (error) {
         console.error("Payment initialization error:", error);
@@ -1320,6 +1433,7 @@ export default {
         }, 500);
       }
     }
+
     if (path === "/api/verify-payment" && request.method === "GET") {
       try {
         if (!env.PAYSTACK_SECRET_KEY || !env.DB) {
@@ -1328,6 +1442,7 @@ export default {
             error: "Payment verification is not configured."
           }, 500);
         }
+
         const reference = url.searchParams.get("reference");
         if (!reference || reference.length > 200) {
           return json({
@@ -1335,9 +1450,43 @@ export default {
             error: "Payment reference missing or invalid."
           }, 400);
         }
+
         const transaction = await verifyPaystackTransaction(reference, env);
-        const { products } = await getVerifiedPurchase(transaction, env);
+        const { products, email } = await getVerifiedPurchase(transaction, env);
+
+        // EMAIL FALLBACK:
+        // The payment is independently verified with Paystack above.
+        // If the webhook has not sent the receipt, this route can send it.
+        // The shared D1 record prevents the webhook and this route from
+        // sending duplicate receipts for the same payment reference.
+        let emailDelivery = {
+          sent: false,
+          duplicate: false,
+          processing: false,
+          error: false
+        };
+
+        try {
+          const delivery = await deliverPurchaseEmailOnce(
+            env,
+            reference,
+            email,
+            products
+          );
+          emailDelivery = {
+            sent: delivery.sent,
+            duplicate: delivery.duplicate,
+            processing: delivery.processing,
+            error: false
+          };
+        } catch (emailError) {
+          // Do not break the success page or downloads if email fails.
+          console.error("Verified-payment email fallback failed:", emailError);
+          emailDelivery.error = true;
+        }
+
         const purchasedProducts = [];
+
         for (const product of products) {
           const token = await createDownloadToken({
             reference,
@@ -1345,8 +1494,10 @@ export default {
             beatId: product.id,
             exp: Date.now() + DOWNLOAD_TOKEN_LIFETIME
           }, env.PAYSTACK_SECRET_KEY);
+
           const downloadUrl =
             `${url.origin}/api/download?token=${encodeURIComponent(token)}`;
+
           purchasedProducts.push({
             productId: product.id,
             productTitle: product.title,
@@ -1356,8 +1507,12 @@ export default {
             downloadUrl
           });
         }
+
         return json({
           success: true,
+          emailSent: emailDelivery.sent,
+          emailProcessing: emailDelivery.processing,
+          emailError: emailDelivery.error,
           products: purchasedProducts,
           beats: purchasedProducts,
           total: products.reduce((sum, product) => sum + product.price, 0),
@@ -1376,6 +1531,7 @@ export default {
         }, 500);
       }
     }
+
     if (path === "/api/download" && request.method === "GET") {
       try {
         if (!env.PAYSTACK_SECRET_KEY || !env.BEATS_BUCKET) {
@@ -1383,18 +1539,22 @@ export default {
             status: 500
           });
         }
+
         const token = url.searchParams.get("token");
         if (!token) {
           return new Response("Download token missing.", { status: 400 });
         }
+
         const data = await verifyDownloadToken(token, env.PAYSTACK_SECRET_KEY);
         if (!data) {
           return new Response("Invalid or expired download link.", {
             status: 403
           });
         }
+
         const id = data.productId || data.beatId;
         let product = await getProduct(env, id);
+
         if (!product && LEGACY_BEATS[id]) {
           product = {
             id,
@@ -1403,9 +1563,11 @@ export default {
             zip_key: null
           };
         }
+
         if (!product) {
           return new Response("Product not found.", { status: 404 });
         }
+
         const object = await getZipObject(env, product);
         if (!object) {
           return new Response(
@@ -1413,6 +1575,7 @@ export default {
             { status: 404 }
           );
         }
+
         const headers = new Headers();
         object.writeHttpMetadata(headers);
         headers.set("Content-Type", "application/zip");
@@ -1430,32 +1593,40 @@ export default {
         });
       }
     }
+
     // Individual beat pages: /beat/<id> serves beat.html with server-side
     // Open Graph + Twitter Card metadata injected into the initial HTML so
     // social crawlers (WhatsApp, X, etc.) can read the title, description
     // and artwork without executing client-side JavaScript.
     const beatPageMatch = path.match(/^\/beat\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+
     if (beatPageMatch && request.method === "GET") {
       const beatId = beatPageMatch[1];
       const assetUrl = new URL(request.url);
       assetUrl.pathname = "/beat";
+
       const assetResponse = await env.ASSETS.fetch(new Request(assetUrl, request));
       if (!assetResponse.ok) return assetResponse;
+
       let html = await assetResponse.text();
+
       try {
         const product = await getProduct(env, beatId);
+
         if (product && product.status === "published") {
           const title = String(product.title || beatId);
           const description = "Listen to and purchase this beat from WagwanSpark Sound Lab.";
           const beatUrl = `${url.origin}/beat/${beatId}`;
-          // Only advertise artwork when it actually exists in R2.
+
           let hasArtwork = Boolean(product.artwork_key);
           if (!hasArtwork) {
             const recovered = await repairStoredFileKey(env, product, "artwork_key");
             hasArtwork = recovered.found;
           }
+
           const artworkUrl = `${url.origin}/api/media/${encodeURIComponent(beatId)}/artwork`;
           const ogTitle = `${title} | WagwanSpark Sound Lab`;
+
           const metaTags = [
             `<meta property="og:title" content="${escapeHtml(ogTitle)}">`,
             `<meta property="og:description" content="${escapeHtml(description)}">`,
@@ -1475,12 +1646,12 @@ export default {
               ? `<meta name="twitter:image" content="${escapeHtml(artworkUrl)}">`
               : ""
           ].filter(Boolean).join("\n    ");
-          // Update the <title> tag with the actual beat name.
+
           html = html.replace(
             /<title>.*?<\/title>/s,
             `<title>${escapeHtml(title)} — WagwanSpark Sound Lab</title>`
           );
-          // Inject OG/Twitter tags right after the existing description meta.
+
           html = html.replace(
             /(<meta name="description"[^>]*>)/,
             `$1\n    ${metaTags}`
@@ -1489,13 +1660,16 @@ export default {
       } catch (error) {
         console.error("Beat page OG metadata injection failed:", error);
       }
+
       const headers = new Headers(assetResponse.headers);
       headers.set("Content-Type", "text/html; charset=utf-8");
+
       return new Response(html, {
         status: assetResponse.status,
         headers
       });
     }
+
     return env.ASSETS.fetch(request);
   }
 };
