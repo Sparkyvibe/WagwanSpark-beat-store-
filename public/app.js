@@ -972,6 +972,8 @@
       return matchesGenre && (!query || searchable.includes(query));
     });
 
+    const artworkTime = activeArtworkAnimationTime(grid);
+
     grid.innerHTML = items.length
       ? items.map(item => productCard(item, "beats")).join("")
       : `<div class="catalogue-message"><p>${
@@ -1007,6 +1009,7 @@
     if (pagination) pagination.innerHTML = "";
 
     updateCardPlayIcons();
+    restoreArtworkAnimationTime(grid, artworkTime);
   }
 
   function renderProductCategory(category) {
@@ -1039,6 +1042,8 @@
       return !query || searchable.includes(query);
     });
 
+    const artworkTime = activeArtworkAnimationTime(grid);
+
     grid.innerHTML = items.length
       ? items.map(item => productCard(item, category)).join("")
       : `<div class="catalogue-message"><p>${
@@ -1050,6 +1055,7 @@
         }</p></div>`;
 
     updateCardPlayIcons();
+    restoreArtworkAnimationTime(grid, artworkTime);
   }
 
   function findProduct(id, category) {
@@ -1474,6 +1480,29 @@
     state.activePreview = null;
     updatePlayButton();
     updateCardPlayIcons();
+  }
+
+  // Re-rendering a grid recreates the card images, which would restart
+  // the playing artwork loop; carry its position over to the new image.
+  function activeArtworkAnimations(root) {
+    return $$(".is-preview-active img", root)
+      .flatMap(img =>
+        typeof img.getAnimations === "function" ? img.getAnimations() : []
+      )
+      .filter(animation => animation.animationName === "wsArtworkZoomDrift");
+  }
+
+  function activeArtworkAnimationTime(root) {
+    const animation = activeArtworkAnimations(root)[0];
+    return animation ? animation.currentTime : null;
+  }
+
+  function restoreArtworkAnimationTime(root, time) {
+    if (time === null) return;
+
+    activeArtworkAnimations(root).forEach(animation => {
+      animation.currentTime = time;
+    });
   }
 
   function updateCardPlayIcons() {
