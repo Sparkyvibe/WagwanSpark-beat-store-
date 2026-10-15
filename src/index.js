@@ -9,11 +9,13 @@ const LEGACY_BEATS = {
   serenade: { title: "SERENADE", price: 7000, candidates: ["beats/SERENADE.zip", "SERENADE.zip"] }
 };
 const CALLBACK_URL = "https://wagwanspark.com.ng/success.html";
+const STORE_ORIGIN = "https://wagwanspark.com.ng";
 const DOWNLOAD_TOKEN_LIFETIME = 30 * 60 * 1000;
 const EMAIL_DOWNLOAD_TOKEN_LIFETIME = 7 * 24 * 60 * 60 * 1000;
 const ADMIN_SESSION_LIFETIME = 8 * 60 * 60 * 1000;
 const SESSION_COOKIE = "ws_admin_session";
 const CATEGORIES = new Set(["beats", "samples", "studio-tools"]);
+
 function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
@@ -25,11 +27,13 @@ function json(data, status = 200, extraHeaders = {}) {
     }
   });
 }
+
 function base64url(bytes) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
+
 function base64urlDecode(value) {
   value = value.replace(/-/g, "+").replace(/_/g, "/");
   while (value.length % 4) value += "=";
@@ -38,6 +42,7 @@ function base64urlDecode(value) {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
 }
+
 async function createSignature(payload, secret) {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -53,6 +58,7 @@ async function createSignature(payload, secret) {
   );
   return base64url(new Uint8Array(signature));
 }
+
 async function verifySignature(payload, signature, secret) {
   const expected = await createSignature(payload, secret);
   if (typeof signature !== "string" || signature.length !== expected.length) return false;
@@ -62,6 +68,7 @@ async function verifySignature(payload, signature, secret) {
   }
   return difference === 0;
 }
+
 async function verifyPaystackWebhookSignature(rawBody, signature, secret) {
   try {
     if (!signature || !secret) return false;
@@ -91,10 +98,12 @@ async function verifyPaystackWebhookSignature(rawBody, signature, secret) {
     return false;
   }
 }
+
 async function createSignedToken(data, secret) {
   const payload = base64url(new TextEncoder().encode(JSON.stringify(data)));
   return `${payload}.${await createSignature(payload, secret)}`;
 }
+
 async function verifySignedToken(token, secret) {
   try {
     if (!token || token.length > 4096) return null;
@@ -111,9 +120,11 @@ async function verifySignedToken(token, secret) {
     return null;
   }
 }
+
 async function createDownloadToken(data, secret) {
   return createSignedToken(data, secret);
 }
+
 async function verifyDownloadToken(token, secret) {
   const data = await verifySignedToken(token, secret);
   if (
@@ -123,6 +134,7 @@ async function verifyDownloadToken(token, secret) {
   ) return null;
   return data;
 }
+
 function cookieValue(request, name) {
   const header = request.headers.get("Cookie") || "";
   for (const part of header.split(";")) {
@@ -133,9 +145,11 @@ function cookieValue(request, name) {
   }
   return "";
 }
+
 function sessionCookie(token, maxAge = 28800) {
   return `${SESSION_COOKIE}=${token}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
 }
+
 async function getAdminSession(request, env) {
   if (!env.ADMIN_PASSWORD) return null;
   const token = cookieValue(request, SESSION_COOKIE);
@@ -144,6 +158,7 @@ async function getAdminSession(request, env) {
   if (!session || session.role !== "admin" || typeof session.csrf !== "string") return null;
   return session;
 }
+
 async function requireAdmin(request, env, requireCsrf = false) {
   const session = await getAdminSession(request, env);
   if (!session) {
@@ -157,17 +172,21 @@ async function requireAdmin(request, env, requireCsrf = false) {
   }
   return { session };
 }
+
 function validId(id) {
   return typeof id === "string" &&
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) &&
     id.length <= 80;
 }
+
 function cleanText(value, maxLength = 200) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
+
 function validCategory(value) {
   return CATEGORIES.has(value) ? value : null;
 }
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -176,6 +195,7 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+
 async function getProduct(env, id) {
   return env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description, artwork_key,
@@ -183,9 +203,11 @@ async function getProduct(env, id) {
      FROM beats WHERE id = ?`
   ).bind(id).first();
 }
+
 async function getBeat(env, id) {
   return getProduct(env, id);
 }
+
 async function getPublishedProducts(env, category) {
   const result = await env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description, artwork_key,
@@ -195,9 +217,11 @@ async function getPublishedProducts(env, category) {
   ).bind(category).all();
   return result.results || [];
 }
+
 async function getPublishedBeats(env) {
   return getPublishedProducts(env, "beats");
 }
+
 function productFileNameVariants(product) {
   const id = String(product.id || "");
   const title = String(product.title || "");
@@ -214,6 +238,7 @@ function productFileNameVariants(product) {
     titleHyphen
   ].filter(Boolean))];
 }
+
 function mediaKeyCandidates(product, column) {
   const candidates = [];
   if (product[column]) candidates.push(product[column]);
@@ -277,6 +302,7 @@ function mediaKeyCandidates(product, column) {
   }
   return [...new Set(candidates.filter(Boolean))];
 }
+
 async function findExistingR2Object(env, product, column) {
   if (!env.BEATS_BUCKET) return { key: null, object: null };
   for (const key of mediaKeyCandidates(product, column)) {
@@ -289,6 +315,7 @@ async function findExistingR2Object(env, product, column) {
   }
   return { key: null, object: null };
 }
+
 async function repairStoredFileKey(env, product, column) {
   const found = await findExistingR2Object(env, product, column);
   if (!found.key) return { found: false, key: null };
@@ -300,6 +327,7 @@ async function repairStoredFileKey(env, product, column) {
   }
   return { found: true, key: found.key };
 }
+
 async function getZipObject(env, product) {
   if (!env.BEATS_BUCKET) return null;
   const found = await findExistingR2Object(env, product, "zip_key");
@@ -312,12 +340,14 @@ async function getZipObject(env, product) {
   }
   return env.BEATS_BUCKET.get(found.key);
 }
+
 function safeFilename(value) {
   return String(value || "download")
     .replace(/[^a-zA-Z0-9 _-]/g, "")
     .trim()
     .slice(0, 100) || "download";
 }
+
 // ==========================================
 // PURCHASE VALIDATION — accepts legacy beatIds and generic productIds
 // ==========================================
@@ -387,6 +417,7 @@ async function getRequestedProducts(data, env) {
   }
   return { products, beats: products, total };
 }
+
 function getPurchasedProductIds(metadata) {
   if (!metadata || typeof metadata !== "object") return null;
   const value = metadata.productIds ?? metadata.beatIds;
@@ -401,6 +432,7 @@ function getPurchasedProductIds(metadata) {
   if (typeof metadata.beatId === "string") return [metadata.beatId];
   return null;
 }
+
 async function verifyPaystackTransaction(reference, env) {
   const response = await fetch(
     `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
@@ -430,6 +462,7 @@ async function verifyPaystackTransaction(reference, env) {
   }
   return transaction;
 }
+
 async function getVerifiedPurchase(transaction, env) {
   const ids = getPurchasedProductIds(transaction.metadata || {});
   if (
@@ -470,6 +503,7 @@ async function getVerifiedPurchase(transaction, env) {
   }
   return { products, beats: products, email };
 }
+
 async function sendPurchaseEmail(env, email, reference, products, origin) {
   if (!env.EMAIL_SCRIPT_URL || !env.EMAIL_SHARED_SECRET) {
     throw new Error("Email delivery secrets are not configured.");
@@ -489,7 +523,7 @@ async function sendPurchaseEmail(env, email, reference, products, origin) {
       exp: Date.now() + EMAIL_DOWNLOAD_TOKEN_LIFETIME
     }, env.PAYSTACK_SECRET_KEY);
     downloadLines.push(
-      `${product.title}\nDownload: ${origin}/api/download?token=${encodeURIComponent(token)}`
+      `${product.title}\nDownload: ${STORE_ORIGIN}/api/download?token=${encodeURIComponent(token)}`
     );
   }
   const subject = products.length === 1
@@ -537,6 +571,7 @@ async function sendPurchaseEmail(env, email, reference, products, origin) {
   }
   return true;
 }
+
 async function handlePaystackWebhook(request, env, url) {
   if (!env.PAYSTACK_SECRET_KEY || !env.DB || !env.BEATS_BUCKET) {
     return json({ error: "Payment service is not configured." }, 500);
@@ -611,7 +646,7 @@ async function handlePaystackWebhook(request, env, url) {
       }
     }
     try {
-      await sendPurchaseEmail(env, email, reference, products, url.origin);
+      await sendPurchaseEmail(env, email, reference, products, STORE_ORIGIN);
       await env.DB.prepare(
         "UPDATE email_deliveries SET status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE reference = ?"
       ).bind(reference).run();
@@ -628,6 +663,7 @@ async function handlePaystackWebhook(request, env, url) {
     return json({ error: "Webhook processing failed." }, 500);
   }
 }
+
 // ==========================================
 // ADMIN API — existing beat routes retained;
 // generic product aliases and authenticated preview added.
@@ -1046,6 +1082,7 @@ async function handleAdmin(request, env, url) {
   }
   return json({ error: "Admin endpoint not found." }, 404);
 }
+
 // ==========================================
 // WORKER ENTRY POINT
 // ==========================================
