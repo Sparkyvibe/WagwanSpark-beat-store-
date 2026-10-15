@@ -577,6 +577,7 @@
         scrollbar-width: none;
         -webkit-overflow-scrolling: touch;
         padding: 4px 1px 6px;
+        scroll-padding-inline: 1px;
       }
 
       .beats-grid.featured-carousel-track::-webkit-scrollbar {
@@ -591,6 +592,10 @@
 
       .featured-carousel-track > .product-card {
         scroll-snap-align: start;
+      }
+
+      .featured-carousel-track > .product-card:last-child {
+        scroll-snap-align: end;
       }
 
       .featured-carousel-track .product-card.is-featured {
@@ -623,7 +628,7 @@
         }
       }
 
-      @media (hover: none) {
+      @media (max-width: 699px) {
         .featured-carousel-bar {
           display: none;
         }
@@ -1691,10 +1696,19 @@
     const reduceMotion = window.matchMedia &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    track.scrollBy({
-      left: direction * step * perView,
-      behavior: reduceMotion ? "auto" : "smooth"
-    });
+    const maxScroll = track.scrollWidth - track.clientWidth;
+    const target = Math.max(0, Math.min(maxScroll, track.scrollLeft + direction * step * perView));
+
+    track.scrollTo({ left: target, behavior: reduceMotion ? "auto" : "smooth" });
+
+    // Some browsers drop or cancel smooth scrolling under load; finish the move.
+    if (!reduceMotion) {
+      setTimeout(() => {
+        if (Math.abs(track.scrollLeft - target) > step / 2) {
+          track.scrollTo({ left: target, behavior: "auto" });
+        }
+      }, 900);
+    }
   }
 
   function bindFeaturedCarousel() {
