@@ -1,9 +1,9 @@
-
  // ==========================================
  // WAGWANSPARK — MULTI-CATEGORY STORE WORKER
  // Keeps existing beat routes and adds Samples + Studio Tools.
  // Adds authenticated Admin audio preview for draft and published products.
  // Purchase email is triggered by both webhook and verified success-page fallback.
+ // Ranking: featured products first, then newest PUBLISH date (published_at).
  // ==========================================
 const LEGACY_BEATS = {
   "sun-fire": { title: "SUN FIRE", price: 7000, candidates: ["beats/SUN FIRE.zip", "SUN FIRE.zip"] },
@@ -198,6 +198,32 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+// ==========================================
+// RANKING SUPPORT — published_at column
+// The column is created automatically the first time it is needed, so no
+// manual database step is required. If you already added it by hand, this
+// does nothing. Beats published before this change have no published_at,
+// so they keep sorting by their created_at date (current order unchanged).
+// ==========================================
+let publishedAtReady = false;
+
+async function ensurePublishedAtColumn(env) {
+  if (publishedAtReady) return;
+  try {
+    await env.DB.prepare("SELECT published_at FROM beats LIMIT 1").first();
+  } catch {
+    try {
+      await env.DB.prepare(
+        "ALTER TABLE beats ADD COLUMN published_at TEXT"
+      ).run();
+    } catch (error) {
+      // Another request may have added it at the same moment.
+      if (!String(error).toLowerCase().includes("duplicate")) throw error;
+    }
+  }
+  publishedAtReady = true;
+}
+
 async function getProduct(env, id) {
   return env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description, artwork_key,
@@ -211,11 +237,12 @@ async function getBeat(env, id) {
 }
 
 async function getPublishedProducts(env, category) {
+  await ensurePublishedAtColumn(env);
   const result = await env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description, artwork_key,
             preview_key, status, featured, category
      FROM beats WHERE status = 'published' AND category = ?
-     ORDER BY featured DESC, created_at DESC`
+     ORDER BY featured DESC, COALESCE(published_at, created_at) DESC, created_at DESC`
   ).bind(category).all();
   return result.results || [];
 }
@@ -1136,9 +1163,20 @@ async function handleAdmin(request, env, url) {
       }
     }
 
+    await ensurePublishedAtColumn(env);
+
+    // published_at is stamped only at the moment a product goes from
+    // draft to published (SQLite reads the OLD status in this expression).
+    // Editing a live product never changes its position in the store.
     await env.DB.prepare(`UPDATE beats
       SET title = ?, genre = ?, bpm = ?, musical_key = ?, price = ?,
-          description = ?, category = ?, status = ?, featured = ?,
+          description = ?, category = ?, featured = ?,
+          published_at = CASE
+            WHEN ? = 'published' AND status != 'published'
+              THEN CURRENT_TIMESTAMP
+            ELSE published_at
+          END,
+          status = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`)
       .bind(
@@ -1149,8 +1187,9 @@ async function handleAdmin(request, env, url) {
         price,
         description,
         category,
-        status,
         featured,
+        status,
+        status,
         id
       ).run();
 
