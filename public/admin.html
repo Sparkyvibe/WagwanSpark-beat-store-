@@ -219,6 +219,7 @@
 
     .pill.published { color: var(--green); background: #193522; }
     .pill.category { color: #c5d4c8; background: #202922; }
+    .pill.featured { color: #071008; background: var(--green); }
 
     .checkrow {
       display: flex;
@@ -401,6 +402,7 @@
               <input id="featured" type="checkbox">
               <label for="featured">Feature this product in the catalogue</label>
             </div>
+            <div id="featuredHint" class="hint"></div>
 
             <div class="actions">
               <button id="saveDraftBtn" class="button" type="submit">Save as draft</button>
@@ -590,6 +592,17 @@
         }
 
         renderFileStatus();
+      }
+
+      // Explains how featuring works and shows how many products are
+      // currently pinned, so the top of the store does not get crowded.
+      function updateFeaturedHint() {
+        const count = beats.filter(item => Number(item.featured) === 1).length;
+
+        $("featuredHint").textContent =
+          "Featured products are pinned to the top of the store. " +
+          "Keep it to 1 or 2 so they stand out. " +
+          "Currently featured: " + count + ".";
       }
 
       // Shows which files are already stored for the product being managed
@@ -838,6 +851,8 @@
         $("draftCount").textContent =
           beats.filter(beat => beat.status !== "published").length;
 
+        updateFeaturedHint();
+
         const list = $("beatList");
         list.replaceChildren();
 
@@ -849,6 +864,8 @@
         }
 
         beats.forEach(beat => {
+          const isFeatured = Number(beat.featured) === 1;
+
           const card = document.createElement("div");
           card.className = "beat";
 
@@ -868,6 +885,13 @@
           statusPill.textContent = beat.status || "draft";
 
           title.append(categoryPill, statusPill);
+
+          if (isFeatured) {
+            const featuredPill = document.createElement("span");
+            featuredPill.className = "pill featured";
+            featuredPill.textContent = "★ Featured";
+            title.appendChild(featuredPill);
+          }
 
           const meta = document.createElement("div");
           meta.className = "beat-meta";
@@ -890,6 +914,12 @@
             actions.appendChild(preview);
           }
 
+          const feature = document.createElement("button");
+          feature.className = "button";
+          feature.type = "button";
+          feature.textContent = isFeatured ? "☆ Unfeature" : "★ Feature";
+          feature.addEventListener("click", () => toggleFeatured(beat.id));
+
           const edit = document.createElement("button");
           edit.className = "button";
           edit.type = "button";
@@ -902,10 +932,68 @@
           remove.textContent = "Delete";
           remove.addEventListener("click", () => deleteBeat(beat.id));
 
-          actions.append(edit, remove);
+          actions.append(feature, edit, remove);
           card.append(info, actions);
           list.appendChild(card);
         });
+      }
+
+      // One-tap pin / unpin from the catalogue list. Sends the product's
+      // saved details with only the featured flag changed, and keeps its
+      // current draft or published status.
+      async function toggleFeatured(id) {
+        const beat = beats.find(item => item.id === id);
+        if (!beat || busy) return;
+
+        const makeFeatured = Number(beat.featured) !== 1;
+
+        if (makeFeatured) {
+          const already = beats.filter(
+            item => Number(item.featured) === 1
+          ).length;
+
+          if (already >= 2 && !confirm(
+            `${already} products are already featured. Featuring too many makes none of them stand out.\n\nFeature "${beat.title || beat.id}" anyway?`
+          )) {
+            return;
+          }
+        }
+
+        setBusy(true);
+
+        try {
+          await api("/api/admin/beats/" + encodeURIComponent(id), {
+            method: "PATCH",
+            body: JSON.stringify({
+              category: beat.category || "beats",
+              title: beat.title,
+              genre: beat.genre,
+              price: beat.price,
+              bpm: beat.bpm ?? "",
+              musical_key: beat.musical_key || "",
+              description: beat.description || "",
+              featured: makeFeatured ? 1 : 0,
+              status: beat.status === "published" ? "published" : "draft"
+            })
+          });
+
+          if (currentBeatId === id) {
+            $("featured").checked = makeFeatured;
+          }
+
+          await loadBeats();
+
+          notice(
+            makeFeatured
+              ? `"${beat.title || id}" is now featured and pinned to the top.`
+              : `"${beat.title || id}" is no longer featured.`,
+            "success"
+          );
+        } catch (error) {
+          notice(error.message, "error");
+        } finally {
+          setBusy(false);
+        }
       }
 
       function stopSelectedPreview() {
@@ -1042,7 +1130,7 @@
         // A draft that has just been published: clear the form.
         if (isEditing && targetStatus === "published" && !wasPublished) {
           resetForm();
-          notice("Product published successfully.", "success");
+          notice("Product published successfully. It now appears at the top of the store (below any featured products).", "success");
           return;
         }
 
@@ -1289,6 +1377,7 @@
 
       updateCategoryUI();
       updateActionButtons();
+      updateFeaturedHint();
       checkSession();
     })();
   </script>
