@@ -1,10 +1,12 @@
- // ==========================================
+// ==========================================
  // WAGWANSPARK — MULTI-CATEGORY STORE WORKER
  // Keeps existing beat routes and adds Samples + Studio Tools.
  // Adds authenticated Admin audio preview for draft and published products.
  // Purchase email is triggered by both webhook and verified success-page fallback.
  // Ranking: featured products first, then newest PUBLISH date (published_at).
  // Featured beats carousel: admin-controlled order stored in featured_position.
+ // Main beats catalogue: admin-controlled order stored in catalogue_position,
+ // fully independent of the carousel. Featured beats are listed only in the carousel.
  // ==========================================
 const LEGACY_BEATS = {
   "sun-fire": { title: "SUN FIRE", price: 7000, candidates: ["beats/SUN FIRE.zip", "SUN FIRE.zip"] },
@@ -249,6 +251,109 @@ async function ensureFeaturedPositionColumn(env) {
   featuredPositionReady = true;
 }
 
+// ==========================================
+// MAIN CATALOGUE ORDER — catalogue_position column
+// Created automatically on first use, like published_at / featured_position.
+// Lower numbers come first in the main "All Beats" catalogue. It is separate
+// from featured_position, and it is NEVER changed by featuring/unfeaturing,
+// so an unfeatured beat returns to the slot it already holds.
+//
+// Initial order: beats that have no position yet are numbered newest-first by
+// publish date (the order the store already showed among non-featured beats).
+// Featured beats and drafts are numbered too, so they have a place to return to.
+// ==========================================
+const BEATS_CATALOGUE_ORDER_SQL =
+  "catalogue_position IS NULL, catalogue_position ASC, " +
+  "COALESCE(published_at, created_at) DESC, created_at DESC, id ASC";
+
+let cataloguePositionReady = false;
+
+async function backfillCataloguePositions(env) {
+  const pending = await env.DB.prepare(
+    `SELECT id FROM beats
+     WHERE category = 'beats' AND catalogue_position IS NULL
+     ORDER BY COALESCE(published_at, created_at) DESC, created_at DESC, id ASC`
+  ).all();
+  const ids = (pending.results || []).map(row => row.id);
+  if (!ids.length) return;
+
+  const lowest = await env.DB.prepare(
+    "SELECT MIN(catalogue_position) AS lowest FROM beats WHERE category = 'beats'"
+  ).first();
+  // First run: number 1..N. Later (a few un-numbered rows): put them on top.
+  const start = lowest && lowest.lowest != null
+    ? Number(lowest.lowest) - ids.length
+    : 1;
+
+  // The IS NULL guard means a concurrent initialisation cannot overwrite
+  // a position that was already assigned.
+  await env.DB.batch(ids.map((id, index) =>
+    env.DB.prepare(
+      "UPDATE beats SET catalogue_position = ? WHERE id = ? AND catalogue_position IS NULL"
+    ).bind(start + index, id)
+  ));
+}
+
+async function ensureCataloguePositionColumn(env) {
+  if (cataloguePositionReady) return;
+  await ensurePublishedAtColumn(env);
+  try {
+    await env.DB.prepare("SELECT catalogue_position FROM beats LIMIT 1").first();
+  } catch {
+    try {
+      await env.DB.prepare(
+        "ALTER TABLE beats ADD COLUMN catalogue_position INTEGER"
+      ).run();
+    } catch (error) {
+      if (!String(error).toLowerCase().includes("duplicate")) throw error;
+    }
+  }
+  await backfillCataloguePositions(env);
+  cataloguePositionReady = true;
+}
+
+// Saves a new order for the main catalogue. `ids` must be exactly the
+// published, non-featured beats. Featured beats and drafts keep their slots
+// (so they return to the right place later); the listed beats are reassigned
+// among the slots that the listed beats occupy. Only catalogue_position is written.
+async function saveCatalogueOrder(env, ids) {
+  await ensureCataloguePositionColumn(env);
+
+  const result = await env.DB.prepare(
+    `SELECT id, status, featured, catalogue_position
+     FROM beats WHERE category = 'beats'
+     ORDER BY ${BEATS_CATALOGUE_ORDER_SQL}`
+  ).all();
+  const rows = result.results || [];
+
+  const isMain = row =>
+    row.status === "published" && Number(row.featured) !== 1;
+  const mainIds = new Set(rows.filter(isMain).map(row => row.id));
+
+  if (mainIds.size !== ids.length || !ids.every(id => mainIds.has(id))) {
+    return { conflict: true };
+  }
+
+  const queue = [...ids];
+  const finalOrder = rows.map(row => isMain(row) ? queue.shift() : row.id);
+  const current = new Map(rows.map(row => [row.id, row.catalogue_position]));
+
+  const writes = [];
+  finalOrder.forEach((id, index) => {
+    const position = index + 1;
+    if (Number(current.get(id)) !== position || current.get(id) == null) {
+      writes.push(
+        env.DB.prepare(
+          "UPDATE beats SET catalogue_position = ? WHERE id = ? AND category = 'beats'"
+        ).bind(position, id)
+      );
+    }
+  });
+
+  if (writes.length) await env.DB.batch(writes);
+  return { conflict: false };
+}
+
 async function getProduct(env, id) {
   return env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description, artwork_key,
@@ -264,11 +369,20 @@ async function getBeat(env, id) {
 async function getPublishedProducts(env, category) {
   await ensurePublishedAtColumn(env);
   await ensureFeaturedPositionColumn(env);
+  await ensureCataloguePositionColumn(env);
+
+  // Beats: the admin's manual catalogue order. Featured beats are returned
+  // too (the storefront shows them in the carousel and leaves them out of the
+  // main catalogue). Samples and Studio Tools keep featured-first, newest-first.
+  const orderBy = category === "beats"
+    ? BEATS_CATALOGUE_ORDER_SQL
+    : "featured DESC, COALESCE(published_at, created_at) DESC, created_at DESC";
+
   const result = await env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description, artwork_key,
-            preview_key, status, featured, featured_position, category
+            preview_key, status, featured, featured_position, catalogue_position, category
      FROM beats WHERE status = 'published' AND category = ?
-     ORDER BY featured DESC, COALESCE(published_at, created_at) DESC, created_at DESC`
+     ORDER BY ${orderBy}`
   ).bind(category).all();
   return result.results || [];
 }
@@ -846,6 +960,7 @@ async function handleAdmin(request, env, url) {
     request.method === "GET"
   ) {
     await ensureFeaturedPositionColumn(env);
+    await ensureCataloguePositionColumn(env);
     const result = await env.DB.prepare(
       "SELECT * FROM beats ORDER BY created_at DESC"
     ).all();
@@ -968,10 +1083,19 @@ async function handleAdmin(request, env, url) {
       return json({ error: "Check the price and BPM values." }, 400);
     }
 
+    await ensureCataloguePositionColumn(env);
+
     try {
+      // A new beat starts at the top of the main catalogue (as new uploads
+      // did before). Publishing, unpublishing or editing never moves it.
       await env.DB.prepare(`INSERT INTO beats
-        (id, title, genre, bpm, musical_key, price, description, status, featured, category, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 0, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+        (id, title, genre, bpm, musical_key, price, description, status, featured, category, catalogue_position, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 0, ?,
+          CASE WHEN ? = 'beats'
+            THEN (SELECT COALESCE(MIN(catalogue_position) - 1, 1) FROM beats WHERE category = 'beats')
+            ELSE NULL
+          END,
+          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
         .bind(
           id,
           title,
@@ -980,6 +1104,7 @@ async function handleAdmin(request, env, url) {
           musicalKey,
           price,
           cleanText(data.description, 2000),
+          category,
           category
         ).run();
     } catch (error) {
@@ -1120,6 +1245,43 @@ async function handleAdmin(request, env, url) {
     });
   }
 
+  // Saves the top-to-bottom order of the MAIN beats catalogue. Independent of
+  // the featured carousel: only catalogue_position is written. The list must be
+  // exactly the published, non-featured beats, so a stale admin tab cannot
+  // drop or resurrect anything. Only the beats category is supported.
+  if (path === "/api/admin/catalogue-order" && request.method === "PUT") {
+    let data;
+    try {
+      data = await request.json();
+    } catch {
+      return json({ error: "Invalid request." }, 400);
+    }
+
+    const category = cleanText(data.category || "beats", 40).toLowerCase();
+    const ids = Array.isArray(data.ids) ? data.ids : null;
+
+    if (
+      category !== "beats" ||
+      !ids ||
+      !ids.length ||
+      ids.length > 500 ||
+      !ids.every(validId) ||
+      new Set(ids).size !== ids.length
+    ) {
+      return json({ error: "Provide the beats category and a list of beat IDs." }, 400);
+    }
+
+    const saved = await saveCatalogueOrder(env, ids);
+
+    if (saved.conflict) {
+      return json({
+        error: "The catalogue list has changed. Refresh the dashboard and try again."
+      }, 409);
+    }
+
+    return json({ success: true, category, ids });
+  }
+
   // Saves the left-to-right order of featured products. The list must be
   // exactly the currently featured products of that category, so a stale
   // admin tab cannot drop or resurrect anything.
@@ -1244,6 +1406,7 @@ async function handleAdmin(request, env, url) {
 
     await ensurePublishedAtColumn(env);
     await ensureFeaturedPositionColumn(env);
+    await ensureCataloguePositionColumn(env);
 
     // published_at is stamped only at the moment a product goes from
     // draft to published (SQLite reads the OLD status in this expression).
@@ -1260,6 +1423,13 @@ async function handleAdmin(request, env, url) {
               SELECT COALESCE(MAX(featured_position), 0) + 1
               FROM beats WHERE featured = 1 AND category = ?
             )
+          END,
+          catalogue_position = CASE
+            WHEN ? = 'beats' AND catalogue_position IS NULL THEN (
+              SELECT COALESCE(MIN(catalogue_position) - 1, 1)
+              FROM beats WHERE category = 'beats'
+            )
+            ELSE catalogue_position
           END,
           published_at = CASE
             WHEN ? = 'published' AND status != 'published'
@@ -1279,6 +1449,7 @@ async function handleAdmin(request, env, url) {
         category,
         featured,
         featured,
+        category,
         category,
         category,
         status,
