@@ -481,8 +481,23 @@
           <p class="hint">
             Featured beats appear left to right in the "Selected for the Vibe"
             carousel on the home page. Only published beats are shown to customers.
+            While a beat is featured it is removed from the main catalogue;
+            when you unfeature it, it returns to its place there.
           </p>
           <div id="featuredOrderList" class="beat-list featured-order"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Main catalogue order</h2>
+          </div>
+          <p class="hint">
+            Arrange the "All Beats" catalogue from top to bottom. This is separate
+            from the featured carousel above: reordering one never changes the other.
+            Featured beats are not listed here while they are featured. Drafts are
+            not listed either.
+          </p>
+          <div id="catalogueOrderList" class="beat-list featured-order"></div>
         </section>
 
         <section class="panel">
@@ -624,7 +639,7 @@
 
         $("featuredHint").textContent =
           "Featured beats appear in the \"Selected for the Vibe\" carousel on the home page " +
-          "(3 to 5 works best) and stay in the regular catalogue. " +
+          "(3 to 5 works best) and are removed from the main catalogue while featured. " +
           "Featured Samples and Studio Tools are pinned to the top of their pages. " +
           "Currently featured: " + beatCount + " beat(s), " +
           (featured.length - beatCount) + " other product(s).";
@@ -734,6 +749,114 @@
           });
           await loadBeats();
           notice("Featured carousel order saved.", "success");
+        } catch (error) {
+          notice(error.message, "error");
+          await loadBeats();
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      // Beats in the manual order customers see in the main "All Beats"
+      // catalogue: published and not featured. Independent of the carousel.
+      function catalogueBeatsInOrder() {
+        const position = item => {
+          const value = Number(item.catalogue_position);
+          return item.catalogue_position != null && Number.isFinite(value)
+            ? value : Infinity;
+        };
+        const published = item => String(item.published_at || item.created_at || "");
+
+        return beats
+          .filter(item =>
+            (item.category || "beats") === "beats" &&
+            item.status === "published" &&
+            Number(item.featured) !== 1
+          )
+          .sort((a, b) =>
+            (position(a) - position(b)) ||
+            published(b).localeCompare(published(a)) ||
+            String(b.created_at || "").localeCompare(String(a.created_at || "")) ||
+            String(a.id).localeCompare(String(b.id))
+          );
+      }
+
+      function renderCatalogueOrder() {
+        const list = $("catalogueOrderList");
+        if (!list) return;
+        list.replaceChildren();
+
+        const ordered = catalogueBeatsInOrder();
+
+        if (!ordered.length) {
+          const empty = document.createElement("p");
+          empty.className = "hint";
+          empty.textContent =
+            "No published, non-featured beats to arrange yet.";
+          list.appendChild(empty);
+          return;
+        }
+
+        ordered.forEach((beat, index) => {
+          const row = document.createElement("div");
+          row.className = "beat";
+
+          const info = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "beat-title";
+
+          const number = document.createElement("span");
+          number.className = "featured-position";
+          number.textContent = String(index + 1);
+
+          title.append(number, document.createTextNode(beat.title || beat.id));
+          info.appendChild(title);
+
+          const actions = document.createElement("div");
+          actions.className = "beat-actions";
+
+          [
+            { label: "↑ Move Up", delta: -1, disabled: index === 0 },
+            { label: "Move Down ↓", delta: 1, disabled: index === ordered.length - 1 }
+          ].forEach(item => {
+            const button = document.createElement("button");
+            button.className = "button";
+            button.type = "button";
+            button.textContent = item.label;
+            button.disabled = busy || item.disabled;
+            if (item.disabled) button.dataset.keepDisabled = "true";
+            button.setAttribute(
+              "aria-label",
+              `${item.label.replace(/[↑↓]/g, "").trim()}: ${beat.title || beat.id}`
+            );
+            button.addEventListener("click", () => moveCatalogue(beat.id, item.delta));
+            actions.appendChild(button);
+          });
+
+          row.append(info, actions);
+          list.appendChild(row);
+        });
+      }
+
+      async function moveCatalogue(id, delta) {
+        if (busy) return;
+
+        const ids = catalogueBeatsInOrder().map(item => item.id);
+        const from = ids.indexOf(id);
+        const to = from + delta;
+        if (from < 0 || to < 0 || to >= ids.length) return;
+
+        [ids[from], ids[to]] = [ids[to], ids[from]];
+
+        setBusy(true);
+
+        try {
+          await api("/api/admin/catalogue-order", {
+            method: "PUT",
+            body: JSON.stringify({ category: "beats", ids })
+          });
+          await loadBeats();
+          notice("Main catalogue order saved.", "success");
         } catch (error) {
           notice(error.message, "error");
           await loadBeats();
@@ -990,6 +1113,7 @@
 
         updateFeaturedHint();
         renderFeaturedOrder();
+        renderCatalogueOrder();
 
         const list = $("beatList");
         list.replaceChildren();
@@ -1095,7 +1219,7 @@
           const limit = category === "beats" ? 5 : 2;
 
           if (already >= limit && !confirm(
-            `${already} ${CATEGORY_LABELS[category] || "products"} are already featured. Featuring too many makes none of them stand out.\n\nFeature "${beat.title || beat.id}" anyway?`
+            `${already} ${CATEGORY_LABELS[category] || "products"} are already featured. Featuring too many makes none of them stand out.\n\nFeature "${beat.title || id}" anyway?`
           )) {
             return;
           }
@@ -1128,9 +1252,11 @@
           notice(
             makeFeatured
               ? (beat.category || "beats") === "beats"
-                ? `"${beat.title || id}" is now featured in the carousel (added at the end).`
+                ? `"${beat.title || id}" is now featured in the carousel (added at the end) and removed from the main catalogue.`
                 : `"${beat.title || id}" is now featured and pinned to the top.`
-              : `"${beat.title || id}" is no longer featured.`,
+              : (beat.category || "beats") === "beats"
+                ? `"${beat.title || id}" is no longer featured and is back in the main catalogue.`
+                : `"${beat.title || id}" is no longer featured.`,
             "success"
           );
         } catch (error) {
