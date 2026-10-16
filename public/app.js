@@ -7,9 +7,11 @@
  * Separate catalogues, audio previews, shared cart and Paystack checkout.
  * Preserves existing API routes, checkout payload and storefront styling.
  *
- * Ranking: the worker returns products already sorted (featured first,
- * then newest publish date). This file keeps that order and adds a
- * "Featured" badge to pinned products.
+ * Ranking: the worker returns products already sorted. Samples and Studio
+ * Tools: featured first, then newest publish date, with a "Featured" badge.
+ * Beats: the admin's manual catalogue order. Featured beats are shown ONLY in
+ * the "Selected for the Vibe" carousel (no badge); the main catalogue lists
+ * the remaining beats in the order received.
  */
 (() => {
   "use strict";
@@ -942,8 +944,10 @@
     // Studio Tools such as FLP projects.
     const playable = Boolean(previewAudio);
 
-    // Featured products are pinned first by the worker; mark them visibly.
-    const featured = Number(product.featured) === 1;
+    // Featured Samples and Studio Tools are pinned first by the worker and
+    // keep their badge. Featured beats get no badge or outline: their place
+    // in the carousel is what marks them as featured.
+    const featured = category !== "beats" && Number(product.featured) === 1;
 
     const metadata = [];
 
@@ -1085,7 +1089,9 @@
 
     const query = state.search.trim().toLowerCase();
 
-    const items = state.products.beats.filter(product => {
+    const catalogue = mainCatalogueBeats();
+
+    const items = catalogue.filter(product => {
       const matchesGenre =
         state.activeFilter === "all" ||
         product.genre.toLowerCase() === state.activeFilter;
@@ -1101,9 +1107,11 @@
     grid.innerHTML = items.length
       ? items.map(item => productCard(item, "beats")).join("")
       : `<div class="catalogue-message"><p>${
-          state.products.beats.length
+          catalogue.length
             ? "No beats match your search."
-            : "No beats are currently published."
+            : state.products.beats.length
+              ? "More beats are coming soon. Check out the featured beats above."
+              : "No beats are currently published."
         }</p></div>`;
 
     const genreFilter = document.getElementById("genreFilter");
@@ -1113,7 +1121,7 @@
 
       const genres = [
         ...new Set(
-          state.products.beats.map(item => item.genre).filter(Boolean)
+          catalogue.map(item => item.genre).filter(Boolean)
         )
       ].sort();
 
@@ -1627,6 +1635,15 @@
     activeArtworkAnimations(root).forEach(animation => {
       animation.currentTime = time;
     });
+  }
+
+  // The main "All Beats" catalogue: every published beat that is NOT in the
+  // featured carousel, in the order received from the worker (the admin's
+  // manual catalogue order). A beat is never in both sections.
+  function mainCatalogueBeats() {
+    return state.products.beats.filter(
+      product => Number(product.featured) !== 1
+    );
   }
 
   // Featured beats in the admin-chosen order. Products featured before
