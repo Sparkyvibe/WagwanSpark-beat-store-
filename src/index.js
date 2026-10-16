@@ -6,7 +6,8 @@
  // Ranking: featured products first, then newest PUBLISH date (published_at).
  // Featured beats carousel: admin-controlled order stored in featured_position.
  // Main beats catalogue: admin-controlled order stored in catalogue_position,
- // fully independent of the carousel. Featured beats are listed only in the carousel.
+ // fully independent of the carousel. Featured beats appear in BOTH the carousel
+ // and the main catalogue.
  // ==========================================
 const LEGACY_BEATS = {
   "sun-fire": { title: "SUN FIRE", price: 7000, candidates: ["beats/SUN FIRE.zip", "SUN FIRE.zip"] },
@@ -313,8 +314,8 @@ async function ensureCataloguePositionColumn(env) {
 }
 
 // Saves a new order for the main catalogue. `ids` must be exactly the
-// published, non-featured beats. Featured beats and drafts keep their slots
-// (so they return to the right place later); the listed beats are reassigned
+// published beats (featured beats included). Drafts keep their slots (so they
+// return to the right place when published); the listed beats are reassigned
 // among the slots that the listed beats occupy. Only catalogue_position is written.
 async function saveCatalogueOrder(env, ids) {
   await ensureCataloguePositionColumn(env);
@@ -326,8 +327,7 @@ async function saveCatalogueOrder(env, ids) {
   ).all();
   const rows = result.results || [];
 
-  const isMain = row =>
-    row.status === "published" && Number(row.featured) !== 1;
+  const isMain = row => row.status === "published";
   const mainIds = new Set(rows.filter(isMain).map(row => row.id));
 
   if (mainIds.size !== ids.length || !ids.every(id => mainIds.has(id))) {
@@ -371,9 +371,9 @@ async function getPublishedProducts(env, category) {
   await ensureFeaturedPositionColumn(env);
   await ensureCataloguePositionColumn(env);
 
-  // Beats: the admin's manual catalogue order. Featured beats are returned
-  // too (the storefront shows them in the carousel and leaves them out of the
-  // main catalogue). Samples and Studio Tools keep featured-first, newest-first.
+  // Beats: the admin's manual catalogue order. Featured beats are returned in
+  // this same list: the storefront shows them in the carousel AND in the main
+  // catalogue. Samples and Studio Tools keep featured-first, newest-first.
   const orderBy = category === "beats"
     ? BEATS_CATALOGUE_ORDER_SQL
     : "featured DESC, COALESCE(published_at, created_at) DESC, created_at DESC";
@@ -1247,8 +1247,8 @@ async function handleAdmin(request, env, url) {
 
   // Saves the top-to-bottom order of the MAIN beats catalogue. Independent of
   // the featured carousel: only catalogue_position is written. The list must be
-  // exactly the published, non-featured beats, so a stale admin tab cannot
-  // drop or resurrect anything. Only the beats category is supported.
+  // exactly the published beats (featured ones included), so a stale admin tab
+  // cannot drop or resurrect anything. Only the beats category is supported.
   if (path === "/api/admin/catalogue-order" && request.method === "PUT") {
     let data;
     try {
