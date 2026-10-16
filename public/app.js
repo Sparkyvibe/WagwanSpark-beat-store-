@@ -9,9 +9,9 @@
  *
  * Ranking: the worker returns products already sorted. Samples and Studio
  * Tools: featured first, then newest publish date, with a "Featured" badge.
- * Beats: the admin's manual catalogue order. Featured beats are shown ONLY in
- * the "Selected for the Vibe" carousel (no badge); the main catalogue lists
- * the remaining beats in the order received.
+ * Beats: the admin's manual catalogue order. Featured beats appear in BOTH the
+ * "Selected for the Vibe" carousel (no badge) and the main catalogue, which
+ * lists every published beat in the order received.
  */
 (() => {
   "use strict";
@@ -512,14 +512,15 @@
         }
       }
 
-      /* Featured beats carousel ("Selected for the Vibe"): reuses the
-         catalogue card, laid out as a compact swipeable row. */
+      /* Featured beats carousel ("Selected for the Vibe"): compact landscape
+         slides. One slide is the main selection; the next one peeks in. */
       .featured-carousel-section[hidden],
       .featured-carousel-nav[hidden] {
         display: none !important;
       }
 
       .featured-carousel-section.beats-section {
+        padding-top: var(--spacing-3xl);
         padding-bottom: 0;
       }
 
@@ -568,18 +569,21 @@
         cursor: default;
       }
 
+      /* Track: padding-inline and scroll-padding-inline must stay equal. */
       .beats-grid.featured-carousel-track {
+        position: relative;
         grid-template-columns: none;
         grid-auto-flow: column;
-        grid-auto-columns: calc((100% - 2 * 12px) / 2.3);
-        gap: 12px;
+        grid-auto-columns: 85%;
+        gap: 10px;
         overflow-x: auto;
+        overflow-y: hidden;
         overscroll-behavior-x: contain;
         scroll-snap-type: x mandatory;
         scrollbar-width: none;
         -webkit-overflow-scrolling: touch;
-        padding: 4px 1px 6px;
-        scroll-padding-inline: 1px;
+        padding: 4px 12px 6px;
+        scroll-padding-inline: 12px;
       }
 
       .beats-grid.featured-carousel-track::-webkit-scrollbar {
@@ -592,45 +596,190 @@
         border-radius: 12px;
       }
 
-      .featured-carousel-track > .product-card {
+      .beats-grid .featured-slide {
         scroll-snap-align: start;
+        scroll-snap-stop: always;
       }
 
-      .featured-carousel-track > .product-card:last-child {
+      .beats-grid .featured-slide:last-child {
         scroll-snap-align: end;
       }
 
-      .featured-carousel-track .product-card.is-featured {
-        box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+      .beats-grid .featured-slide:hover {
+        transform: none;
       }
 
-      .featured-carousel-track .product-description,
-      .featured-carousel-track .product-featured-badge {
-        display: none;
+      .featured-slide .product-artwork {
+        aspect-ratio: 16 / 9;
+        min-height: 180px;
+        max-height: 210px;
       }
 
-      @media (max-width: 699px) {
+      .featured-slide .product-artwork::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1;
+        height: 38%;
+        background: linear-gradient(to top, var(--light-bg), transparent);
+        pointer-events: none;
+      }
+
+      .featured-share-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 3;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border: 1px solid rgba(255,255,255,.28);
+        border-radius: 50%;
+        background: rgba(10,10,10,.62);
+        color: #fff;
+        font-size: 13px;
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+      }
+
+      .featured-share-btn:hover,
+      .featured-share-btn:focus-visible {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+      }
+
+      .featured-info {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px 12px 12px;
+      }
+
+      .featured-title-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .featured-title-row h3 {
+        min-width: 0;
+        margin: 0;
+        overflow: hidden;
+        font-size: 1rem;
+        font-weight: 800;
+        line-height: 1.25;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .featured-price {
+        flex: none;
+        color: var(--primary-color);
+        font-size: 1rem;
+        font-weight: 800;
+      }
+
+      .featured-meta {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: .68rem;
+        font-weight: 600;
+        letter-spacing: .06em;
+        line-height: 1.4;
+        text-transform: uppercase;
+      }
+
+      .featured-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 4px;
+      }
+
+      .featured-slide .featured-actions .btn {
+        box-sizing: border-box !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 38px !important;
+        margin: 0 !important;
+        padding: 8px 10px !important;
+        border-radius: 8px !important;
+        box-shadow: none !important;
+        font-size: .8rem !important;
+        font-weight: 750 !important;
+        line-height: 1.2 !important;
+        white-space: nowrap !important;
+        transform: none !important;
+      }
+
+      .featured-slide .featured-play-btn {
+        background: #1e1e1e !important;
+        border: 1px solid var(--border-strong) !important;
+        color: var(--text-primary) !important;
+      }
+
+      .featured-slide .featured-play-btn:hover:not(:disabled) {
+        border-color: var(--primary-color) !important;
+        color: var(--primary-color) !important;
+      }
+
+      .featured-slide .featured-add-btn {
+        background: var(--gradient) !important;
+        border: 0 !important;
+        color: var(--primary-ink) !important;
+      }
+
+      @media (min-width: 560px) {
         .beats-grid.featured-carousel-track {
-          padding: 4px 8px 6px;
-          scroll-padding-inline: 8px;
+          grid-auto-columns: 62%;
         }
       }
 
       @media (min-width: 700px) {
         .beats-grid.featured-carousel-track {
-          grid-auto-columns: calc((100% - 3 * 16px) / 3.4);
+          grid-auto-columns: calc((100% - 2 * 16px) / 2.35);
           gap: 16px;
+          padding: 4px 2px 6px;
+          scroll-padding-inline: 2px;
+        }
+
+        .featured-slide .product-artwork {
+          min-height: 0;
         }
       }
 
       @media (min-width: 1040px) {
         .beats-grid.featured-carousel-track {
-          grid-auto-columns: calc((100% - 4 * 18px) / 5);
-          gap: 18px;
+          grid-auto-columns: calc((100% - 3 * 20px) / 3.25);
+          gap: 20px;
         }
       }
 
       @media (max-width: 699px) {
+        .featured-carousel-section.beats-section {
+          padding-top: 2.25rem;
+          padding-bottom: .25rem;
+        }
+
+        .featured-carousel-section .section-header {
+          margin-bottom: .75rem;
+        }
+
+        .featured-carousel-section + .beats-section {
+          padding-top: 2.5rem;
+        }
+
         .featured-carousel-bar {
           display: none;
         }
@@ -1109,9 +1258,7 @@
       : `<div class="catalogue-message"><p>${
           catalogue.length
             ? "No beats match your search."
-            : state.products.beats.length
-              ? "More beats are coming soon. Check out the featured beats above."
-              : "No beats are currently published."
+            : "No beats are currently published."
         }</p></div>`;
 
     const genreFilter = document.getElementById("genreFilter");
@@ -1637,13 +1784,12 @@
     });
   }
 
-  // The main "All Beats" catalogue: every published beat that is NOT in the
-  // featured carousel, in the order received from the worker (the admin's
-  // manual catalogue order). A beat is never in both sections.
+  // The main "All Beats" catalogue: every published beat (featured ones
+  // included), in the order received from the worker (the admin's manual
+  // catalogue order). The carousel is a separate presentation of the
+  // featured subset; each beat appears once in this list.
   function mainCatalogueBeats() {
-    return state.products.beats.filter(
-      product => Number(product.featured) !== 1
-    );
+    return state.products.beats;
   }
 
   // Featured beats in the admin-chosen order. Products featured before
@@ -1664,6 +1810,85 @@
       .map(({ product }) => product);
   }
 
+  // Compact landscape card used only by the "Selected for the Vibe" carousel.
+  // The same beat is also rendered by productCard() in the main catalogue.
+  function featuredCard(product) {
+    const inCart = state.cart.includes(cartKey(product));
+    const playable = Boolean(productPreview(product));
+
+    const bpm =
+      product.bpm !== null && Number.isFinite(product.bpm) && product.bpm > 0
+        ? `${product.bpm} BPM`
+        : "";
+
+    const meta = [product.genre, bpm, product.musical_key, "MP3 + WAV"]
+      .filter(Boolean)
+      .map(escapeHtml)
+      .join(" &middot; ");
+
+    const id = escapeHtml(product.id);
+
+    return `
+      <article
+        class="beat-card product-card featured-slide${playable ? " product-card-playable" : ""}"
+        data-product-id="${id}"
+        data-category="beats"
+        data-previewable="${playable ? "true" : "false"}"
+      >
+        <div class="beat-artwork product-artwork">
+          <img
+            src="${escapeHtml(productArtwork(product))}"
+            alt="${escapeHtml(product.title)} artwork"
+            loading="lazy"
+            onerror="this.onerror=null;this.style.display='none';this.parentElement.classList.add('artwork-placeholder');"
+          >
+          ${playable ? `
+          <span class="artwork-play-overlay" aria-hidden="true">
+            <span class="artwork-play-icon"><i class="fas fa-play"></i></span>
+          </span>` : ""}
+          <button
+            type="button"
+            class="featured-share-btn"
+            data-action="share"
+            data-id="${id}"
+            data-category="beats"
+            aria-label="Share ${escapeHtml(product.title)}"
+          ><i class="fas fa-share-alt" aria-hidden="true"></i></button>
+        </div>
+
+        <div class="featured-info">
+          <div class="featured-title-row">
+            <h3>${escapeHtml(product.title)}</h3>
+            <strong class="featured-price">${money(product.price)}</strong>
+          </div>
+
+          <p class="featured-meta">${meta}</p>
+
+          <div class="featured-actions">
+            <button
+              type="button"
+              class="btn featured-play-btn"
+              data-action="play"
+              data-id="${id}"
+              data-category="beats"
+              ${playable ? "" : "disabled"}
+            ><i class="fas fa-play" aria-hidden="true"></i> Play Beat</button>
+            <button
+              type="button"
+              class="btn btn-primary featured-add-btn"
+              data-action="add"
+              data-id="${id}"
+              data-category="beats"
+            >${
+              inCart
+                ? '<i class="fas fa-check" aria-hidden="true"></i> Added to Cart'
+                : '<i class="fas fa-cart-plus" aria-hidden="true"></i> Add to Cart'
+            }</button>
+          </div>
+        </div>
+      </article>`;
+  }
+
   function renderFeaturedCarousel() {
     const section = document.getElementById("featured");
     const track = document.getElementById("featuredCarousel");
@@ -1680,13 +1905,74 @@
     const scrollLeft = track.scrollLeft;
     const artworkTime = activeArtworkAnimationTime(track);
 
-    track.innerHTML = items.map(item => productCard(item, "beats")).join("");
+    track.setAttribute("role", "region");
+    track.setAttribute("aria-label", "Featured beats");
+    track.setAttribute("tabindex", "0");
+    track.innerHTML = items.map(item => featuredCard(item)).join("");
     section.hidden = false;
     track.scrollLeft = scrollLeft;
 
     updateCardPlayIcons();
     restoreArtworkAnimationTime(track, artworkTime);
     updateFeaturedCarouselNav();
+  }
+
+  // ----- Featured carousel navigation -----
+  // The slide the carousel is heading to lives in featuredNav.index, and every
+  // arrow click moves exactly one slide from THAT index, never from the live
+  // scroll position (which is mid-animation during rapid clicks).
+  const featuredNav = { index: 0, busy: false, timer: 0 };
+  const FEATURED_SETTLE_MS = 700;
+
+  function prefersReducedMotion() {
+    return Boolean(
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+  }
+
+  function featuredMetrics(track) {
+    const slides = [...track.querySelectorAll(".featured-slide")];
+    const style = getComputedStyle(track);
+    const gap = parseFloat(style.columnGap) || 0;
+    const padLeft = parseFloat(style.paddingLeft) || 0;
+    const padRight = parseFloat(style.paddingRight) || 0;
+    const slideWidth = slides.length ? slides[0].offsetWidth : 0;
+    const perView = slideWidth
+      ? Math.max(1, Math.floor(
+          (track.clientWidth - padLeft - padRight + gap + 1) / (slideWidth + gap)
+        ))
+      : 1;
+    const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
+
+    return {
+      slides,
+      maxScroll,
+      maxIndex: Math.max(0, slides.length - perView),
+      offsetOf: index => Math.min(
+        maxScroll,
+        Math.max(0, slides[index].offsetLeft - padLeft)
+      )
+    };
+  }
+
+  // Which slide the track is really showing (after a swipe, for example).
+  function featuredIndexFromScroll(track, metrics) {
+    if (!metrics.slides.length) return 0;
+    if (track.scrollLeft >= metrics.maxScroll - 2) return metrics.maxIndex;
+
+    let best = 0;
+    let bestDistance = Infinity;
+
+    for (let i = 0; i <= metrics.maxIndex; i += 1) {
+      const distance = Math.abs(metrics.offsetOf(i) - track.scrollLeft);
+      if (distance < bestDistance) {
+        best = i;
+        bestDistance = distance;
+      }
+    }
+
+    return best;
   }
 
   function updateFeaturedCarouselNav() {
@@ -1696,36 +1982,58 @@
     const next = document.getElementById("featuredNext");
     if (!track || !nav || !prev || !next) return;
 
-    const maxScroll = track.scrollWidth - track.clientWidth;
-    nav.hidden = maxScroll <= 2;
-    prev.disabled = track.scrollLeft <= 2;
-    next.disabled = track.scrollLeft >= maxScroll - 2;
+    const metrics = featuredMetrics(track);
+    nav.hidden = metrics.maxScroll <= 2;
+
+    // While an arrow-driven move is in flight, judge the ends by where the
+    // carousel is heading, not by the half-finished scroll position.
+    prev.disabled = featuredNav.busy
+      ? featuredNav.index <= 0
+      : track.scrollLeft <= 2;
+    next.disabled = featuredNav.busy
+      ? featuredNav.index >= metrics.maxIndex
+      : track.scrollLeft >= metrics.maxScroll - 2;
   }
 
-  function scrollFeaturedCarousel(direction) {
+  function goToFeatured(direction) {
     const track = document.getElementById("featuredCarousel");
-    const card = track && $(".product-card", track);
-    if (!track || !card) return;
+    if (!track) return;
 
-    const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
-    const step = card.getBoundingClientRect().width + gap;
-    const perView = Math.max(1, Math.floor((track.clientWidth + gap) / step));
-    const reduceMotion = window.matchMedia &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const metrics = featuredMetrics(track);
+    if (!metrics.slides.length) return;
 
-    const maxScroll = track.scrollWidth - track.clientWidth;
-    const target = Math.max(0, Math.min(maxScroll, track.scrollLeft + direction * step * perView));
-
-    track.scrollTo({ left: target, behavior: reduceMotion ? "auto" : "smooth" });
-
-    // Some browsers drop or cancel smooth scrolling under load; finish the move.
-    if (!reduceMotion) {
-      setTimeout(() => {
-        if (Math.abs(track.scrollLeft - target) > step / 2) {
-          track.scrollTo({ left: target, behavior: "auto" });
-        }
-      }, 900);
+    // The first click after a swipe starts from where the track really is.
+    if (!featuredNav.busy) {
+      featuredNav.index = featuredIndexFromScroll(track, metrics);
     }
+
+    featuredNav.index = Math.max(
+      0,
+      Math.min(metrics.maxIndex, featuredNav.index + direction)
+    );
+
+    const left = metrics.offsetOf(featuredNav.index);
+
+    featuredNav.busy = true;
+    clearTimeout(featuredNav.timer);
+
+    track.scrollTo({
+      left,
+      behavior: prefersReducedMotion() ? "auto" : "smooth"
+    });
+
+    updateFeaturedCarouselNav();
+
+    featuredNav.timer = setTimeout(() => {
+      featuredNav.busy = false;
+
+      // Some browsers cancel smooth scrolling under load; finish the move.
+      if (Math.abs(track.scrollLeft - left) > 2) {
+        track.scrollTo({ left, behavior: "auto" });
+      }
+
+      updateFeaturedCarouselNav();
+    }, FEATURED_SETTLE_MS);
   }
 
   function bindFeaturedCarousel() {
@@ -1735,8 +2043,20 @@
     const prev = document.getElementById("featuredPrev");
     const next = document.getElementById("featuredNext");
 
-    if (prev) prev.addEventListener("click", () => scrollFeaturedCarousel(-1));
-    if (next) next.addEventListener("click", () => scrollFeaturedCarousel(1));
+    if (prev) prev.addEventListener("click", () => goToFeatured(-1));
+    if (next) next.addEventListener("click", () => goToFeatured(1));
+
+    track.addEventListener("keydown", event => {
+      if (event.target !== track) return;
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        goToFeatured(1);
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        goToFeatured(-1);
+      }
+    });
 
     let frame = 0;
     const scheduleNavUpdate = () => {
@@ -1781,6 +2101,19 @@
 
       if (icon) {
         icon.className = isPlaying ? "fas fa-pause" : "fas fa-play";
+      }
+
+      const playButton = $("[data-action='play']", card);
+
+      if (playButton) {
+        const label = isPlaying ? "pause" : "play";
+
+        if (playButton.dataset.state !== label) {
+          playButton.dataset.state = label;
+          playButton.innerHTML = isPlaying
+            ? '<i class="fas fa-pause" aria-hidden="true"></i> Pause'
+            : '<i class="fas fa-play" aria-hidden="true"></i> Play Beat';
+        }
       }
     });
   }
@@ -2004,6 +2337,8 @@
           addToCart(product, true);
         } else if (product && actionButton.dataset.action === "share") {
           shareBeat(product);
+        } else if (product && actionButton.dataset.action === "play") {
+          toggleCardPreview(product);
         }
 
         return;
