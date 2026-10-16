@@ -4,6 +4,7 @@
  // Adds authenticated Admin audio preview for draft and published products.
  // Purchase email is triggered by both webhook and verified success-page fallback.
  // Ranking: featured products first, then newest PUBLISH date (published_at).
+ // Featured beats carousel: admin-controlled order stored in featured_position.
  // ==========================================
 const LEGACY_BEATS = {
   "sun-fire": { title: "SUN FIRE", price: 7000, candidates: ["beats/SUN FIRE.zip", "SUN FIRE.zip"] },
@@ -224,6 +225,30 @@ async function ensurePublishedAtColumn(env) {
   publishedAtReady = true;
 }
 
+// ==========================================
+// FEATURED ORDER SUPPORT — featured_position column
+// Created automatically on first use, like published_at. Lower numbers come
+// first in the featured carousel; NULL (featured before this existed, or not
+// featured) sorts after positioned products in the existing store order.
+// ==========================================
+let featuredPositionReady = false;
+
+async function ensureFeaturedPositionColumn(env) {
+  if (featuredPositionReady) return;
+  try {
+    await env.DB.prepare("SELECT featured_position FROM beats LIMIT 1").first();
+  } catch {
+    try {
+      await env.DB.prepare(
+        "ALTER TABLE beats ADD COLUMN featured_position INTEGER"
+      ).run();
+    } catch (error) {
+      if (!String(error).toLowerCase().includes("duplicate")) throw error;
+    }
+  }
+  featuredPositionReady = true;
+}
+
 async function getProduct(env, id) {
   return env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description, artwork_key,
@@ -238,9 +263,10 @@ async function getBeat(env, id) {
 
 async function getPublishedProducts(env, category) {
   await ensurePublishedAtColumn(env);
+  await ensureFeaturedPositionColumn(env);
   const result = await env.DB.prepare(
     `SELECT id, title, genre, bpm, musical_key, price, description, artwork_key,
-            preview_key, status, featured, category
+            preview_key, status, featured, featured_position, category
      FROM beats WHERE status = 'published' AND category = ?
      ORDER BY featured DESC, COALESCE(published_at, created_at) DESC, created_at DESC`
   ).bind(category).all();
@@ -819,6 +845,7 @@ async function handleAdmin(request, env, url) {
     (path === "/api/admin/beats" || path === "/api/admin/products") &&
     request.method === "GET"
   ) {
+    await ensureFeaturedPositionColumn(env);
     const result = await env.DB.prepare(
       "SELECT * FROM beats ORDER BY created_at DESC"
     ).all();
@@ -1093,6 +1120,58 @@ async function handleAdmin(request, env, url) {
     });
   }
 
+  // Saves the left-to-right order of featured products. The list must be
+  // exactly the currently featured products of that category, so a stale
+  // admin tab cannot drop or resurrect anything.
+  if (path === "/api/admin/featured-order" && request.method === "PUT") {
+    let data;
+    try {
+      data = await request.json();
+    } catch {
+      return json({ error: "Invalid request." }, 400);
+    }
+
+    const category = validCategory(
+      cleanText(data.category || "beats", 40).toLowerCase()
+    );
+    const ids = Array.isArray(data.ids) ? data.ids : null;
+
+    if (
+      !category ||
+      !ids ||
+      !ids.length ||
+      ids.length > 200 ||
+      !ids.every(validId) ||
+      new Set(ids).size !== ids.length
+    ) {
+      return json({ error: "Provide a valid category and list of product IDs." }, 400);
+    }
+
+    await ensureFeaturedPositionColumn(env);
+
+    const current = await env.DB.prepare(
+      "SELECT id FROM beats WHERE featured = 1 AND category = ?"
+    ).bind(category).all();
+    const featuredIds = new Set((current.results || []).map(row => row.id));
+
+    if (
+      featuredIds.size !== ids.length ||
+      !ids.every(id => featuredIds.has(id))
+    ) {
+      return json({
+        error: "The featured list has changed. Refresh the dashboard and try again."
+      }, 409);
+    }
+
+    await env.DB.batch(ids.map((id, index) =>
+      env.DB.prepare(
+        "UPDATE beats SET featured_position = ? WHERE id = ? AND featured = 1 AND category = ?"
+      ).bind(index + 1, id, category)
+    ));
+
+    return json({ success: true, category, ids });
+  }
+
   const match = path.match(
     /^\/api\/admin\/(?:beats|products)\/([a-z0-9-]+)$/
   );
@@ -1164,13 +1243,24 @@ async function handleAdmin(request, env, url) {
     }
 
     await ensurePublishedAtColumn(env);
+    await ensureFeaturedPositionColumn(env);
 
     // published_at is stamped only at the moment a product goes from
     // draft to published (SQLite reads the OLD status in this expression).
     // Editing a live product never changes its position in the store.
+    // Newly featured products join the end of the featured order; editing
+    // an already featured product keeps its place.
     await env.DB.prepare(`UPDATE beats
       SET title = ?, genre = ?, bpm = ?, musical_key = ?, price = ?,
           description = ?, category = ?, featured = ?,
+          featured_position = CASE
+            WHEN ? = 0 THEN NULL
+            WHEN featured = 1 AND category = ? THEN featured_position
+            ELSE (
+              SELECT COALESCE(MAX(featured_position), 0) + 1
+              FROM beats WHERE featured = 1 AND category = ?
+            )
+          END,
           published_at = CASE
             WHEN ? = 'published' AND status != 'published'
               THEN CURRENT_TIMESTAMP
@@ -1188,6 +1278,9 @@ async function handleAdmin(request, env, url) {
         description,
         category,
         featured,
+        featured,
+        category,
+        category,
         status,
         status,
         id

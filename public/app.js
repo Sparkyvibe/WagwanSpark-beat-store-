@@ -509,6 +509,130 @@
           animation-play-state: running;
         }
       }
+
+      /* Featured beats carousel ("Selected for the Vibe"): reuses the
+         catalogue card, laid out as a compact swipeable row. */
+      .featured-carousel-section[hidden],
+      .featured-carousel-nav[hidden] {
+        display: none !important;
+      }
+
+      .featured-carousel-section.beats-section {
+        padding-bottom: 0;
+      }
+
+      .featured-carousel-section .section-header {
+        margin-bottom: 1.1rem;
+      }
+
+      .featured-carousel-bar {
+        display: flex;
+        justify-content: flex-end;
+        max-width: 1300px;
+        min-height: 0;
+        margin: 0 auto 10px;
+      }
+
+      .featured-carousel-nav {
+        display: flex;
+        gap: 8px;
+      }
+
+      .featured-carousel-arrow {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        border: 1px solid #262626;
+        border-radius: 50%;
+        background: #151515;
+        color: #e6e6e6;
+        font-size: 13px;
+        cursor: pointer;
+        transition: border-color .2s ease, color .2s ease, opacity .2s ease;
+      }
+
+      .featured-carousel-arrow:hover:not(:disabled),
+      .featured-carousel-arrow:focus-visible {
+        border-color: rgba(204,255,0,.55);
+        color: #ccff00;
+        outline: none;
+      }
+
+      .featured-carousel-arrow:disabled {
+        opacity: .35;
+        cursor: default;
+      }
+
+      .beats-grid.featured-carousel-track {
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: calc((100% - 2 * 12px) / 2.3);
+        gap: 12px;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        padding: 4px 1px 6px;
+        scroll-padding-inline: 1px;
+      }
+
+      .beats-grid.featured-carousel-track::-webkit-scrollbar {
+        display: none;
+      }
+
+      .beats-grid.featured-carousel-track:focus-visible {
+        outline: 1px solid rgba(204,255,0,.45);
+        outline-offset: 4px;
+        border-radius: 12px;
+      }
+
+      .featured-carousel-track > .product-card {
+        scroll-snap-align: start;
+      }
+
+      .featured-carousel-track > .product-card:last-child {
+        scroll-snap-align: end;
+      }
+
+      .featured-carousel-track .product-card.is-featured {
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+      }
+
+      .featured-carousel-track .product-description,
+      .featured-carousel-track .product-featured-badge {
+        display: none;
+      }
+
+      @media (max-width: 699px) {
+        .beats-grid.featured-carousel-track {
+          padding: 4px 8px 6px;
+          scroll-padding-inline: 8px;
+        }
+      }
+
+      @media (min-width: 700px) {
+        .beats-grid.featured-carousel-track {
+          grid-auto-columns: calc((100% - 3 * 16px) / 3.4);
+          gap: 16px;
+        }
+      }
+
+      @media (min-width: 1040px) {
+        .beats-grid.featured-carousel-track {
+          grid-auto-columns: calc((100% - 4 * 18px) / 5);
+          gap: 18px;
+        }
+      }
+
+      @media (max-width: 699px) {
+        .featured-carousel-bar {
+          display: none;
+        }
+      }
     `;
 
     document.head.appendChild(style);
@@ -1505,6 +1629,111 @@
     });
   }
 
+  // Featured beats in the admin-chosen order. Products featured before
+  // ordering existed have no position and follow in the catalogue order.
+  function featuredBeats() {
+    const position = product => {
+      const value = Number(product.featured_position);
+      return product.featured_position != null &&
+        Number.isInteger(value) && value > 0 ? value : Infinity;
+    };
+
+    return state.products.beats
+      .map((product, index) => ({ product, index }))
+      .filter(({ product }) => Number(product.featured) === 1)
+      .sort((a, b) =>
+        (position(a.product) - position(b.product)) || (a.index - b.index)
+      )
+      .map(({ product }) => product);
+  }
+
+  function renderFeaturedCarousel() {
+    const section = document.getElementById("featured");
+    const track = document.getElementById("featuredCarousel");
+    if (!section || !track) return;
+
+    const items = featuredBeats();
+
+    if (!items.length) {
+      section.hidden = true;
+      track.innerHTML = "";
+      return;
+    }
+
+    const scrollLeft = track.scrollLeft;
+    const artworkTime = activeArtworkAnimationTime(track);
+
+    track.innerHTML = items.map(item => productCard(item, "beats")).join("");
+    section.hidden = false;
+    track.scrollLeft = scrollLeft;
+
+    updateCardPlayIcons();
+    restoreArtworkAnimationTime(track, artworkTime);
+    updateFeaturedCarouselNav();
+  }
+
+  function updateFeaturedCarouselNav() {
+    const track = document.getElementById("featuredCarousel");
+    const nav = document.getElementById("featuredCarouselNav");
+    const prev = document.getElementById("featuredPrev");
+    const next = document.getElementById("featuredNext");
+    if (!track || !nav || !prev || !next) return;
+
+    const maxScroll = track.scrollWidth - track.clientWidth;
+    nav.hidden = maxScroll <= 2;
+    prev.disabled = track.scrollLeft <= 2;
+    next.disabled = track.scrollLeft >= maxScroll - 2;
+  }
+
+  function scrollFeaturedCarousel(direction) {
+    const track = document.getElementById("featuredCarousel");
+    const card = track && $(".product-card", track);
+    if (!track || !card) return;
+
+    const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
+    const step = card.getBoundingClientRect().width + gap;
+    const perView = Math.max(1, Math.floor((track.clientWidth + gap) / step));
+    const reduceMotion = window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const maxScroll = track.scrollWidth - track.clientWidth;
+    const target = Math.max(0, Math.min(maxScroll, track.scrollLeft + direction * step * perView));
+
+    track.scrollTo({ left: target, behavior: reduceMotion ? "auto" : "smooth" });
+
+    // Some browsers drop or cancel smooth scrolling under load; finish the move.
+    if (!reduceMotion) {
+      setTimeout(() => {
+        if (Math.abs(track.scrollLeft - target) > step / 2) {
+          track.scrollTo({ left: target, behavior: "auto" });
+        }
+      }, 900);
+    }
+  }
+
+  function bindFeaturedCarousel() {
+    const track = document.getElementById("featuredCarousel");
+    if (!track) return;
+
+    const prev = document.getElementById("featuredPrev");
+    const next = document.getElementById("featuredNext");
+
+    if (prev) prev.addEventListener("click", () => scrollFeaturedCarousel(-1));
+    if (next) next.addEventListener("click", () => scrollFeaturedCarousel(1));
+
+    let frame = 0;
+    const scheduleNavUpdate = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        updateFeaturedCarouselNav();
+      });
+    };
+
+    track.addEventListener("scroll", scheduleNavUpdate, { passive: true });
+    window.addEventListener("resize", scheduleNavUpdate);
+  }
+
   function updateCardPlayIcons() {
     const audio = document.getElementById("audioPlayer");
 
@@ -1720,6 +1949,8 @@
   }
 
   function renderAll() {
+    renderFeaturedCarousel();
+
     // Prefer the actual page grid, with URL detection as a fallback.
     if (document.getElementById("samplesGrid")) {
       renderProductCategory("samples");
@@ -1797,6 +2028,7 @@
     }
 
     bindHeroSearch();
+    bindFeaturedCarousel();
 
     const categorySearchInput =
       document.getElementById("sampleSearchInput") ||
