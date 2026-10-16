@@ -481,8 +481,8 @@
           <p class="hint">
             Featured beats appear left to right in the "Selected for the Vibe"
             carousel on the home page. Only published beats are shown to customers.
-            While a beat is featured it is removed from the main catalogue;
-            when you unfeature it, it returns to its place there.
+            Featured beats also stay in the main catalogue; this order does not
+            change the main catalogue order below.
           </p>
           <div id="featuredOrderList" class="beat-list featured-order"></div>
         </section>
@@ -494,8 +494,8 @@
           <p class="hint">
             Arrange the "All Beats" catalogue from top to bottom. This is separate
             from the featured carousel above: reordering one never changes the other.
-            Featured beats are not listed here while they are featured. Drafts are
-            not listed either.
+            Every published beat is listed here, featured beats included. Drafts
+            are not listed.
           </p>
           <div id="catalogueOrderList" class="beat-list featured-order"></div>
         </section>
@@ -639,7 +639,7 @@
 
         $("featuredHint").textContent =
           "Featured beats appear in the \"Selected for the Vibe\" carousel on the home page " +
-          "(3 to 5 works best) and are removed from the main catalogue while featured. " +
+          "(3 to 5 works best) and also stay in the main catalogue. " +
           "Featured Samples and Studio Tools are pinned to the top of their pages. " +
           "Currently featured: " + beatCount + " beat(s), " +
           (featured.length - beatCount) + " other product(s).";
@@ -758,7 +758,8 @@
       }
 
       // Beats in the manual order customers see in the main "All Beats"
-      // catalogue: published and not featured. Independent of the carousel.
+      // catalogue: every published beat, featured ones included. Independent
+      // of the carousel.
       function catalogueBeatsInOrder() {
         const position = item => {
           const value = Number(item.catalogue_position);
@@ -770,8 +771,7 @@
         return beats
           .filter(item =>
             (item.category || "beats") === "beats" &&
-            item.status === "published" &&
-            Number(item.featured) !== 1
+            item.status === "published"
           )
           .sort((a, b) =>
             (position(a) - position(b)) ||
@@ -792,7 +792,7 @@
           const empty = document.createElement("p");
           empty.className = "hint";
           empty.textContent =
-            "No published, non-featured beats to arrange yet.";
+            "No published beats to arrange yet.";
           list.appendChild(empty);
           return;
         }
@@ -810,6 +810,15 @@
           number.textContent = String(index + 1);
 
           title.append(number, document.createTextNode(beat.title || beat.id));
+
+          // Admin-only marker: shows which beats are also in the carousel.
+          if (Number(beat.featured) === 1) {
+            const featuredPill = document.createElement("span");
+            featuredPill.className = "pill featured";
+            featuredPill.textContent = "★ Featured";
+            title.appendChild(featuredPill);
+          }
+
           info.appendChild(title);
 
           const actions = document.createElement("div");
@@ -1252,10 +1261,10 @@
           notice(
             makeFeatured
               ? (beat.category || "beats") === "beats"
-                ? `"${beat.title || id}" is now featured in the carousel (added at the end) and removed from the main catalogue.`
+                ? `"${beat.title || id}" is now featured in the carousel (added at the end) and still appears in the main catalogue.`
                 : `"${beat.title || id}" is now featured and pinned to the top.`
               : (beat.category || "beats") === "beats"
-                ? `"${beat.title || id}" is no longer featured and is back in the main catalogue.`
+                ? `"${beat.title || id}" is no longer featured. It stays in the main catalogue.`
                 : `"${beat.title || id}" is no longer featured.`,
             "success"
           );
