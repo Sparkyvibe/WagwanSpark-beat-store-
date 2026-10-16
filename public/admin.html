@@ -630,13 +630,14 @@
           (featured.length - beatCount) + " other product(s).";
       }
 
-      // Featured beats in carousel order: saved positions first, then any
-      // without a position in the store's own order (newest publish first).
+      // Featured beats in carousel order: NULL-positioned (legacy) beats
+      // sort first in the store's own order (newest publish first), then
+      // explicitly positioned beats follow in their saved order.
       function featuredBeatsInOrder() {
         const position = item => {
           const value = Number(item.featured_position);
           return item.featured_position != null &&
-            Number.isInteger(value) && value > 0 ? value : Infinity;
+            Number.isInteger(value) && value > 0 ? value : 0;
         };
         const published = item => String(item.published_at || item.created_at || "");
 

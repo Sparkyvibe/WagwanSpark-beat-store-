@@ -1257,7 +1257,7 @@ async function handleAdmin(request, env, url) {
             WHEN ? = 0 THEN NULL
             WHEN featured = 1 AND category = ? THEN featured_position
             ELSE (
-              SELECT COALESCE(MAX(featured_position), 0) + 1
+              SELECT MAX(COALESCE(featured_position, 0)) + 1
               FROM beats WHERE featured = 1 AND category = ?
             )
           END,

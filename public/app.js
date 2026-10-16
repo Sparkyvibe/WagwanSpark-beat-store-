@@ -1630,12 +1630,15 @@
   }
 
   // Featured beats in the admin-chosen order. Products featured before
-  // ordering existed have no position and follow in the catalogue order.
+  // ordering existed have no position (NULL) and sort first in their
+  // catalogue order; explicitly positioned beats follow after them.
+  // A newly featured beat gets a position after all existing featured
+  // beats (including NULL-positioned ones), so it appears at the end.
   function featuredBeats() {
     const position = product => {
       const value = Number(product.featured_position);
       return product.featured_position != null &&
-        Number.isInteger(value) && value > 0 ? value : Infinity;
+        Number.isInteger(value) && value > 0 ? value : 0;
     };
 
     return state.products.beats
@@ -1685,10 +1688,22 @@
     next.disabled = track.scrollLeft >= maxScroll - 2;
   }
 
+  // Tracks the pending fallback timer and its target scroll position so a
+  // newer arrow click can cancel a previous click's fallback before it fires.
+  let featuredScrollTimer = 0;
+  let featuredScrollTarget = 0;
+
   function scrollFeaturedCarousel(direction) {
     const track = document.getElementById("featuredCarousel");
     const card = track && $(".product-card", track);
     if (!track || !card) return;
+
+    // Cancel any pending fallback from a previous arrow click so its
+    // stale target cannot override this newer scroll.
+    if (featuredScrollTimer) {
+      clearTimeout(featuredScrollTimer);
+      featuredScrollTimer = 0;
+    }
 
     const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
     const step = card.getBoundingClientRect().width + gap;
@@ -1699,13 +1714,15 @@
     const maxScroll = track.scrollWidth - track.clientWidth;
     const target = Math.max(0, Math.min(maxScroll, track.scrollLeft + direction * step * perView));
 
+    featuredScrollTarget = target;
     track.scrollTo({ left: target, behavior: reduceMotion ? "auto" : "smooth" });
 
     // Some browsers drop or cancel smooth scrolling under load; finish the move.
     if (!reduceMotion) {
-      setTimeout(() => {
-        if (Math.abs(track.scrollLeft - target) > step / 2) {
-          track.scrollTo({ left: target, behavior: "auto" });
+      featuredScrollTimer = setTimeout(() => {
+        featuredScrollTimer = 0;
+        if (Math.abs(track.scrollLeft - featuredScrollTarget) > step / 2) {
+          track.scrollTo({ left: featuredScrollTarget, behavior: "auto" });
         }
       }, 900);
     }
