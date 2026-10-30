@@ -29,6 +29,13 @@
   const CATEGORIES = ["beats", "samples", "studio-tools"];
   const REQUEST_TIMEOUT_MS = 12000;
 
+  // Genre spellings that should be treated as one genre. Keys are lowercase
+  // spellings found in the data; values are the label shown in the store
+  // (genre dropdown, beat cards, search and filtering).
+  const GENRE_ALIASES = {
+    afrobeats: "Afrobeat"
+  };
+
   const CHECKOUT_LABEL =
     '<span>Proceed to Checkout</span> <i class="fas fa-lock" aria-hidden="true"></i>';
 
@@ -131,6 +138,12 @@
       item.instrument ||
       categoryLabel(item.category)
     );
+
+    // Tidy stray spaces and merge spelling variants (e.g. "Afrobeats"
+    // becomes "Afrobeat") so the genre filter lists each genre once.
+    item.genre = item.genre.trim();
+    item.genre =
+      GENRE_ALIASES[item.genre.toLowerCase()] || item.genre;
 
     item.description = safeText(
       item.description || item.details || ""
