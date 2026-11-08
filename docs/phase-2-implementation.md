@@ -1,37 +1,18 @@
 # Phase 2 — checkout validation and order creation
 
-Status: implemented for `feature/licensing-phase-2`, not merged, not deployed.
+Status: implemented on `feature/licensing-phase-2`; not merged or deployed.
 
-## What was implemented
+## Implementation
 
-This phase adds a licensing-aware checkout path that validates each customer selection server-side, resolves prices only from D1, and creates an atomic `orders` + `order_items` record set with immutable snapshot data.
+`src/phase2-worker.js` adds a separate `POST /api/create-order` licensing-aware order endpoint and delegates all other requests to the original Worker in `src/index.js`. The Worker entry point in `wrangler.toml` now points at this wrapper. The legacy payment initialization, verification, webhook, email delivery, and download-token handlers are not replaced or routed through the new order flow.
 
-Key behaviour:
+The endpoint accepts `email` and `items`, with each item containing `beat_id` and `licence_key`. It validates each beat as a published beat-category product, checks the licence catalogue and per-beat offering, rejects sold-exclusive beats, and resolves price, title, label, and exact package key from D1. Browser-supplied price and total fields are ignored. Item count is limited to 25, IDs and licence keys are length/form constrained, duplicate `(beat_id, licence_key)` pairs are rejected, email is limited to 254 characters, and the complete JSON request is limited to 16 KiB.
 
-- Accepts a validated customer order payload with one or more `(beat_id, licence_key)` pairs.
-- Confirms each beat exists in `beats`, is published, and is not already sold exclusively.
-- Resolves each requested licence from `licences` and `beat_licences`.
-- Rejects unknown, disabled, unavailable, invalid-price, or missing-package selections.
-- Ignores any browser-supplied price or total values and recalculates from D1 data.
-- Creates a unique pending order with a generated reference and order items that store the exact beat title, licence label, price, and package key used at purchase time.
-- Uses a D1 transaction to guarantee that the order and all items are created together, or nothing is created.
+Successful orders are stored pending with `orders.amount` in kobo (NGN × 100) and `order_items.price` in NGN. Cryptographically random IDs and unique-index-protected references are generated. Item records preserve beat title, licence key and label, price, and package key snapshots. No entitlements are issued.
 
-## Endpoint(s)
+## API
 
-Added endpoint(s):
-
-- `POST /api/create-order`
-- `POST /api/checkout`
-- `POST /api/checkout/validate`
-- `POST /api/checkout/licensing`
-- `POST /api/create-licensing-order`
-- `POST /api/licensing-order`
-
-A request can send either a single item or an array named `items`, `selections`, `licenses`, or `licenceSelections`. The code also accepts one-off pair fields such as `beat_id` + `licence_key`.
-
-## Request format
-
-Example request body:
+Request:
 
 ```json
 {
@@ -43,125 +24,24 @@ Example request body:
 }
 ```
 
-Response format on success:
+Success response (HTTP 201) contains `success`, `order` (including generated ID/reference, NGN currency, kobo amount, NGN total and pending status), `items` (snapshot rows), and top-level `reference`, `total`, `amount`, `currency`, and `itemCount`. Validation errors are HTTP 400 with a customer-safe `error`; D1 failures return a generic HTTP 500 response.
 
-```json
-{
-  "success": true,
-  "status": true,
-  "order": {
-    "id": "ord_...",
-    "reference": "WS-...",
-    "email": "buyer@example.com",
-    "currency": "NGN",
-    "amount": 450000,
-    "total": 4500,
-    "status": "pending"
-  },
-  "items": [
-    {
-      "id": "item_...",
-      "order_id": "ord_...",
-      "beat_id": "beat-a",
-      "beat_title": "Beat A",
-      "licence_key": "mp3",
-      "licence_label": "MP3 License",
-      "price": 4500,
-      "package_key": "beats/beat-a-mp3.zip"
-    }
-  ],
-  "total": 4500,
-  "amount": 450000,
-  "currency": "NGN",
-  "reference": "WS-...",
-  "itemCount": 1
-}
-```
+## D1 transaction strategy
 
-Validation errors return a `400` response with a short customer-safe message, for example:
+All inserts are prepared with bound parameters and submitted together through `env.DB.batch(statements)`. This is Cloudflare D1's supported batch API; D1 executes the statements sequentially inside a transaction, and a failed statement rolls back the batch. The implementation verifies the batch result count and each statement's change count, and returns a generic error if batch execution fails. No manual `BEGIN`, `COMMIT`, or `ROLLBACK` SQL is used.
 
-```json
-{
-  "success": false,
-  "status": false,
-  "error": "Licence mp3 is unavailable for beat beat-a."
-}
-```
+Tests use an in-memory SQLite-backed D1 API adapter whose `batch()` method wraps the statements in a SQLite transaction and deliberately fails on an `order_items` insert to verify rollback. This exercises the application contract, but is not a live Cloudflare deployment test; compatibility relies on D1's documented `D1Database.batch()` behavior.
 
-## Validation rules
+## Compatibility and scope
 
-- `email` must be a syntactically valid address.
-- `items` must be an array of 1 to 25 entries.
-- No duplicate `(beat_id, licence_key)` pair is allowed in a single order.
-- Each beat must exist in `beats`, be `status = 'published'`, and belong to the `beats` category.
-- Each requested licence must exist in `licences` and be `enabled = 1`.
-- Each `(beat_id, licence_key)` pair must exist in `beat_licences` and be `enabled = 1`.
-- `beat_licences.price` must be a positive integer.
-- `beat_licences.package_key` must be present and non-empty.
-- The same beat cannot be purchased if `exclusive_sales.beat_id` already has a row.
-- The total is computed from D1 only; browser-provided totals or prices are ignored.
+The new endpoint is separate from `/api/create-payment`. Requests not targeting the new endpoint are forwarded unchanged to the original Worker, preserving existing payment initialization/verification, Paystack webhook, purchase email, and download-token behavior. The endpoint does not call Paystack, issue entitlements, reserve exclusivity, alter package keys, or change R2 objects. Exclusive sale records are checked only to reject already-sold beats.
 
-## Order/reference lifecycle
+No migrations are added or run. No production D1 or customer data is accessed or modified by this implementation.
 
-- A new random order ID is generated for each order.
-- A new reference is generated using cryptographic randomness and the `WS-...` format.
-- `orders.amount` is stored in kobo for the NGN Paystack-compatible amount, while `order_items.price` stores the original NGN unit price snapshot.
-- The order starts in `status = 'pending'`.
-- If a transaction fails after the order has begun, `ROLLBACK` is executed so no partial records remain.
+## Tests
 
-## Database operations and transaction strategy
+Run the full suite with `npm test`. Phase 2 tests cover valid single/multi-item orders, price manipulation, unknown beat/licence, disabled/unavailable licence, missing package, invalid price, duplicate selections, exclusive sale, invalid email, atomic batch failure, immutable snapshots after post-order catalogue edits, and unique references. Test execution results must be recorded after running the command; repository API access does not provide a test runner.
 
-The checkout implementation uses parameterized D1 queries and a transaction wrapper:
+## Remaining for Phase 3
 
-- open transaction with `BEGIN IMMEDIATE`
-- insert `orders`
-- insert each `order_items` row
-- commit
-- if anything fails, roll back
-
-This prevents partial orders from being left behind when validation or insertion fails mid-way.
-
-## Compatibility with the existing checkout
-
-This phase adds a separate licensing-aware order creation route without modifying the legacy flow:
-
-- `/api/create-payment` is unchanged
-- `/api/verify-payment` is unchanged
-- `/api/download` is unchanged
-- webhook and purchase-email behavior remain intact
-- no entitlements are issued during this phase
-- no UI, cart, reservation, or exclusivity workflow was added
-- no R2 object or package key was changed
-
-## Tests and results
-
-Testing command:
-
-```bash
-npm test
-```
-
-The Phase 2 suite includes the required cases:
-
-- valid single-item order
-- valid multi-item order
-- client-submitted price manipulation
-- unknown beat
-- unknown licence key
-- disabled licence
-- missing package key
-- invalid price
-- duplicate selections
-- exclusively sold beat
-- invalid email
-- atomic failure
-- immutable snapshot correctness
-- unique order reference
-
-## Known limitations and what remains for Phase 3
-
-- This phase creates the pending order record but does not issue entitlements.
-- It does not create the Paystack verification/webhook side effects for the new order; that remains for Phase 3.
-- Exclusivity reservations and exclusive sales remain out of scope for this phase.
-- The new API is intentionally separate from the existing checkout route until the full licensing-aware flow is integrated in a later phase.
-
+Phase 3 must connect pending licensing orders to Paystack initialization, verified payment/webhook processing, status transitions, idempotency, and entitlement creation. Licensing-specific email/download fulfillment is not implemented here.
