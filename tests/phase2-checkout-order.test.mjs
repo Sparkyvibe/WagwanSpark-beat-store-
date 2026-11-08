@@ -13,7 +13,7 @@ const BASE_SCHEMA = read(".base44/schema.sql");
 const MIGRATION_SCHEMA = read("migrations/0001_licensing_schema.sql");
 const MIGRATION_BACKFILL = read("migrations/0002_backfill_legacy_licence.sql");
 
-function makeDb({ failOrderItemInsert = false } = {}) {
+function makeDb({ failOrderItemInsertAt = 0 } = {}) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(BASE_SCHEMA);
   sqlite.exec(MIGRATION_SCHEMA);
@@ -31,31 +31,42 @@ function makeDb({ failOrderItemInsert = false } = {}) {
   sqlite.prepare("INSERT INTO beat_licences (beat_id, licence_key, price, package_key, enabled) VALUES ('beat-b', 'mp3_wav', 10000, 'beats/beat-b.zip', 1)").run();
   sqlite.prepare("INSERT INTO beat_licences (beat_id, licence_key, price, package_key, enabled) VALUES ('beat-c', 'mp3_wav', 15000, 'beats/beat-c.zip', 1)").run();
 
+  let orderItemInsertCount = 0;
+  const makeStatement = (sql, params = []) => ({
+    sql,
+    params,
+    bind(...boundParams) {
+      return makeStatement(sql, boundParams);
+    },
+    async first(column) {
+      const statement = sqlite.prepare(sql);
+      return (column ? statement.get(...params)?.[column] : statement.get(...params)) ?? null;
+    },
+    async all() {
+      return { results: sqlite.prepare(sql).all(...params) };
+    },
+    async run() {
+      const result = sqlite.prepare(sql).run(...params);
+      return { meta: { changes: Number(result.changes) } };
+    }
+  });
+
+  // This adapter deliberately models D1's documented batch contract: ordered
+  // statements share one transaction and any failed statement rolls it back.
   const db = {
     prepare(sql) {
-      return {
-        bind(...params) {
-          return { sql, params };
-        },
-        async first() {
-          return sqlite.prepare(sql).get() ?? null;
-        },
-        async all() {
-          return { results: sqlite.prepare(sql).all() };
-        },
-        async run() {
-          const result = sqlite.prepare(sql).run();
-          return { meta: { changes: Number(result.changes) } };
-        }
-      };
+      return makeStatement(sql);
     },
     async batch(statements) {
       sqlite.exec("BEGIN");
       try {
         const results = [];
         for (const statement of statements) {
-          if (failOrderItemInsert && /^INSERT INTO order_items/i.test(statement.sql.trim())) {
-            throw new Error("simulated order_items insert failure");
+          if (/^INSERT INTO order_items/i.test(statement.sql.trim())) {
+            orderItemInsertCount += 1;
+            if (orderItemInsertCount === failOrderItemInsertAt) {
+              throw new Error("simulated order_items insert failure");
+            }
           }
           const result = sqlite.prepare(statement.sql).run(...statement.params);
           results.push({ meta: { changes: Number(result.changes) } });
@@ -87,7 +98,7 @@ async function postOrder(db, body) {
   return worker.fetch(createRequest(body), makeEnv(db));
 }
 
- test("valid single-item order uses D1 price and snapshots", async () => {
+test("valid single-item order uses D1 price and snapshots", async () => {
   const { db, sqlite } = makeDb();
   const response = await postOrder(db, { email: "buyer@example.com", items: [{ beat_id: "beat-a", licence_key: "mp3" }] });
   const data = await response.json();
@@ -187,9 +198,12 @@ test("invalid email is rejected", async () => {
   assert.equal(response.status, 400);
 });
 
-test("D1 batch failure at order_items insert leaves no partial order", async () => {
-  const { db, sqlite } = makeDb({ failOrderItemInsert: true });
-  const response = await postOrder(db, { email: "buyer@example.com", items: [{ beat_id: "beat-a", licence_key: "mp3" }] });
+test("D1 batch failure on second order_items insert leaves no partial order", async () => {
+  const { db, sqlite } = makeDb({ failOrderItemInsertAt: 2 });
+  const response = await postOrder(db, { email: "buyer@example.com", items: [
+    { beat_id: "beat-a", licence_key: "mp3" },
+    { beat_id: "beat-a", licence_key: "stems" }
+  ] });
   const data = await response.json();
   assert.equal(response.status, 500);
   assert.equal(data.success, false);
@@ -203,6 +217,8 @@ test("snapshots remain unchanged after the offering is edited", async () => {
   const data = await response.json();
   assert.equal(response.status, 201);
 
+  // The order captures the original title, label, price and package. Changes
+  // made afterward must not rewrite the order_items snapshot.
   sqlite.prepare("UPDATE beats SET title = 'Renamed Beat' WHERE id = 'beat-a'").run();
   sqlite.prepare("UPDATE licences SET label = 'Renamed Licence' WHERE licence_key = 'mp3'").run();
   sqlite.prepare("UPDATE beat_licences SET price = 9000, package_key = 'beats/beat-a-repriced.zip' WHERE beat_id = 'beat-a' AND licence_key = 'mp3'").run();
