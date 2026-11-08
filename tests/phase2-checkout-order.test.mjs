@@ -13,7 +13,7 @@ const BASE_SCHEMA = read(".base44/schema.sql");
 const MIGRATION_SCHEMA = read("migrations/0001_licensing_schema.sql");
 const MIGRATION_BACKFILL = read("migrations/0002_backfill_legacy_licence.sql");
 
-function makeDb({ failOrderItemInsertAt = 0 } = {}) {
+function makeDb({ failOrderItemInsertAt = 0, invalidOffering = null } = {}) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(BASE_SCHEMA);
   sqlite.exec(MIGRATION_SCHEMA);
@@ -39,6 +39,18 @@ function makeDb({ failOrderItemInsertAt = 0 } = {}) {
       return makeStatement(sql, boundParams);
     },
     async first(column) {
+      if (
+        invalidOffering &&
+        sql.includes("SELECT price, package_key, enabled FROM beat_licences WHERE beat_id = ? AND licence_key = ?") &&
+        params[0] === invalidOffering.beatId &&
+        params[1] === invalidOffering.licenceKey
+      ) {
+        return {
+          price: invalidOffering.price,
+          package_key: invalidOffering.packageKey,
+          enabled: 1
+        };
+      }
       const statement = sqlite.prepare(sql);
       return (column ? statement.get(...params)?.[column] : statement.get(...params)) ?? null;
     },
@@ -162,16 +174,24 @@ test("unavailable beat/licence offering is rejected", async () => {
   assert.equal(response.status, 400);
 });
 
-test("missing package key is rejected", async () => {
-  const { db, sqlite } = makeDb();
-  sqlite.prepare("UPDATE beat_licences SET package_key = ' ' WHERE beat_id = 'beat-a' AND licence_key = 'mp3'").run();
+test("missing package key is rejected by checkout validation", async () => {
+  const { db } = makeDb({ invalidOffering: {
+    beatId: "beat-a",
+    licenceKey: "mp3",
+    price: 4500,
+    packageKey: " "
+  } });
   const response = await postOrder(db, { email: "buyer@example.com", items: [{ beat_id: "beat-a", licence_key: "mp3" }] });
   assert.equal(response.status, 400);
 });
 
-test("invalid licence price is rejected", async () => {
-  const { db, sqlite } = makeDb();
-  sqlite.prepare("UPDATE beat_licences SET price = 0 WHERE beat_id = 'beat-a' AND licence_key = 'mp3'").run();
+test("invalid licence price is rejected by checkout validation", async () => {
+  const { db } = makeDb({ invalidOffering: {
+    beatId: "beat-a",
+    licenceKey: "mp3",
+    price: 0,
+    packageKey: "beats/beat-a-mp3.zip"
+  } });
   const response = await postOrder(db, { email: "buyer@example.com", items: [{ beat_id: "beat-a", licence_key: "mp3" }] });
   assert.equal(response.status, 400);
 });
@@ -224,7 +244,7 @@ test("snapshots remain unchanged after the offering is edited", async () => {
   sqlite.prepare("UPDATE beat_licences SET price = 9000, package_key = 'beats/beat-a-repriced.zip' WHERE beat_id = 'beat-a' AND licence_key = 'mp3'").run();
 
   const snapshot = sqlite.prepare("SELECT beat_title, licence_key, licence_label, price, package_key FROM order_items WHERE order_id = ?").get(data.order.id);
-  assert.deepEqual(snapshot, {
+  assert.deepEqual({ ...snapshot }, {
     beat_title: "Beat A",
     licence_key: "mp3",
     licence_label: "MP3 License",
