@@ -1,14 +1,3 @@
-// ==========================================
- // WAGWANSPARK — MULTI-CATEGORY STORE WORKER
- // Keeps existing beat routes and adds Samples + Studio Tools.
- // Adds authenticated Admin audio preview for draft and published products.
- // Purchase email is triggered by both webhook and verified success-page fallback.
- // Ranking: featured products first, then newest PUBLISH date (published_at).
- // Featured beats carousel: admin-controlled order stored in featured_position.
- // Main beats catalogue: admin-controlled order stored in catalogue_position,
- // fully independent of the carousel. Featured beats appear in BOTH the carousel
- // and the main catalogue.
- // ==========================================
 const LEGACY_BEATS = {
   "sun-fire": { title: "SUN FIRE", price: 7000, candidates: ["beats/SUN FIRE.zip", "SUN FIRE.zip"] },
   phenomenal: { title: "PHENOMENAL", price: 7000, candidates: ["beats/PHENOMENAL.zip", "PHENOMENAL.zip"] },
