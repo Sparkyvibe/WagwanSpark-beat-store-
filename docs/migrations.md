@@ -7,6 +7,9 @@ lazily by the Worker at request time (`ensurePublishedAtColumn`,
 From Phase 1 on, licensing tables are owned by versioned migrations under
 `migrations/`, applied with Cloudflare's own D1 migration runner.
 
+> Phase 1 status, scope, test results and the remaining phases are recorded in
+> [`docs/phase-1-implementation.md`](phase-1-implementation.md).
+
 ## Current migrations
 
 | File | Kind | Effect |
