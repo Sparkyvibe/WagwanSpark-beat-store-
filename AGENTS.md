@@ -18,7 +18,7 @@ docker compose -f docker-compose.base44.yml logs -f store    # Worker logs
 ```
 
 - `store` serves the Worker + assets on port 3000 with the repo bind-mounted, so source edits are picked up without a rebuild (multi-page site, so hard-refresh the browser — there is no SPA router).
-- `setup` is a one-shot service that runs before `store`: `.base44/dev-setup.sh` applies `.base44/schema.sql`, inserts the demo catalogue (`.base44/demo-products.sql`) and uploads the demo artwork/preview files into local R2. It is idempotent (`IF NOT EXISTS` / `INSERT OR IGNORE` / overwriting puts).
+- `setup` is a one-shot service that runs before `store`: `.base44/dev-setup.sh` applies `.base44/schema.sql`, inserts the demo catalogue (`.base44/demo-products.sql`), applies the `migrations/` licensing migrations and uploads the demo artwork/preview files into local R2. It is idempotent (`IF NOT EXISTS` / `INSERT OR IGNORE` / overwriting puts).
 - D1 + R2 state lives in the `wrangler-state` volume at `/data/state` (not in the repo). `docker compose -f docker-compose.base44.yml down -v` wipes it and the next `up` re-seeds.
 
 ## Frontend structure (Sonic Kinetics redesign)
@@ -60,7 +60,9 @@ preview script by pointing a same-origin `<iframe>` at `/samples` or
 
 ### Schema
 
-The repository has no migrations directory, but every route needs the `beats` table, so `.base44/schema.sql` creates it (columns inferred from the SQL in `src/index.js`). `email_deliveries` is created at runtime by the Paystack webhook — nothing to do locally.
+Every route needs the `beats` table, so `.base44/schema.sql` creates it (columns inferred from the SQL in `src/index.js`); `published_at`, `featured_position` and `catalogue_position` are added lazily by the Worker on first use.
+
+Licensing tables (Phase 1 on) are owned by `migrations/` and applied with `wrangler d1 migrations apply DB --local --persist-to /data/state` — `.base44/dev-setup.sh` runs this after the seed. Nothing reads those tables yet, so they change no behaviour. See `docs/migrations.md` for the apply and recovery runbook; never apply them to a remote database without approval.
 
 ### Secrets
 

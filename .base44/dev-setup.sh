@@ -20,6 +20,11 @@ echo "[setup] seeding demo products"
 wrangler d1 execute DB --local --yes --persist-to "$PERSIST_DIR" \
   --file .base44/demo-products.sql
 
+# Licensing tables (Phase 1). Runs after the seed so the legacy backfill sees
+# the demo catalogue. Idempotent — wrangler records applied migrations.
+echo "[setup] applying licensing migrations"
+wrangler d1 migrations apply DB --local --persist-to "$PERSIST_DIR"
+
 echo "[setup] uploading demo media to local R2"
 put() {
   wrangler r2 object put "$BUCKET/$1" \
