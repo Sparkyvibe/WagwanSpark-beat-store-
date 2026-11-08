@@ -27,3 +27,15 @@ bucket_name = "wagwanspark-beats"
 binding = "DB"
 database_name = "wagwanspark-beats-db"
 database_id = "92e11314-8f64-4719-ae7c-e7dde302ac13"
+
+
+[previews]
+
+[[previews.r2_buckets]]
+binding = "BEATS_BUCKET"
+bucket_name = "wagwanspark-beats-preview"
+
+[[previews.d1_databases]]
+binding = "DB"
+database_name = "wagwanspark-beats-preview-db"
+database_id = "f0ea6d02-3e9b-4e57-95e5-15b6e8f43b7a"
