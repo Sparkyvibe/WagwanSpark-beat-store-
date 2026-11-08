@@ -1,14 +1,3 @@
-// ==========================================
- // WAGWANSPARK — MULTI-CATEGORY STORE WORKER
- // Keeps existing beat routes and adds Samples + Studio Tools.
- // Adds authenticated Admin audio preview for draft and published products.
- // Purchase email is triggered by both webhook and verified success-page fallback.
- // Ranking: featured products first, then newest PUBLISH date (published_at).
- // Featured beats carousel: admin-controlled order stored in featured_position.
- // Main beats catalogue: admin-controlled order stored in catalogue_position,
- // fully independent of the carousel. Featured beats appear in BOTH the carousel
- // and the main catalogue.
- // ==========================================
 const LEGACY_BEATS = {
   "sun-fire": { title: "SUN FIRE", price: 7000, candidates: ["beats/SUN FIRE.zip", "SUN FIRE.zip"] },
   phenomenal: { title: "PHENOMENAL", price: 7000, candidates: ["beats/PHENOMENAL.zip", "PHENOMENAL.zip"] },
@@ -185,6 +174,12 @@ function validId(id) {
     id.length <= 80;
 }
 
+function validLicenceKey(value) {
+  return typeof value === "string" &&
+    /^[a-z0-9_]+$/.test(value) &&
+    value.length <= 64;
+}
+
 function cleanText(value, maxLength = 200) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
@@ -200,6 +195,45 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function uniqueId(prefix) {
+  const random = crypto.getRandomValues(new Uint8Array(16));
+  let hex = "";
+  for (const byte of random) hex += byte.toString(16).padStart(2, "0");
+  return `${prefix}_${hex}`;
+}
+
+function uniqueOrderReference() {
+  const ts = Date.now().toString(36).toUpperCase();
+  const random = crypto.getRandomValues(new Uint8Array(12));
+  const hex = Array.from(random)
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return `WS-${ts}-${hex}`;
+}
+
+async function runAtomicD1Transaction(env, callback) {
+  const db = env.DB;
+  let started = false;
+  try {
+    if (db && typeof db.prepare === "function") {
+      await db.prepare("BEGIN IMMEDIATE").run();
+      started = true;
+    }
+    const result = await callback();
+    if (db && typeof db.prepare === "function") {
+      await db.prepare("COMMIT").run();
+    }
+    return result;
+  } catch (error) {
+    if (db && typeof db.prepare === "function" && started) {
+      try {
+        await db.prepare("ROLLBACK").run();
+      } catch {}
+    }
+    throw error;
+  }
 }
 
 // ==========================================
@@ -596,6 +630,293 @@ function getPurchasedProductIds(metadata) {
   if (typeof metadata.productId === "string") return [metadata.productId];
   if (typeof metadata.beatId === "string") return [metadata.beatId];
   return null;
+}
+
+function normalizeLicensingSelection(data) {
+  const rawItems = Array.isArray(data.items)
+    ? data.items
+    : Array.isArray(data.selections)
+      ? data.selections
+      : Array.isArray(data.licenses)
+        ? data.licenses
+        : Array.isArray(data.licenceSelections)
+          ? data.licenceSelections
+          : Array.isArray(data.beatIds) && Array.isArray(data.licenceKeys)
+            ? data.beatIds.map((beatId, index) => ({ beat_id: beatId, licence_key: data.licenceKeys[index] }))
+            : typeof data.beat_id === "string" && typeof data.licence_key === "string"
+              ? [{ beat_id: data.beat_id, licence_key: data.licence_key }]
+              : typeof data.beatId === "string" && typeof data.licenceKey === "string"
+                ? [{ beat_id: data.beatId, licence_key: data.licenceKey }]
+                : [];
+
+  if (!rawItems.length || rawItems.length > 25) {
+    return { error: "Provide between 1 and 25 selected beats." };
+  }
+
+  const items = [];
+  const seen = new Set();
+  for (const item of rawItems) {
+    if (!item || typeof item !== "object") {
+      return { error: "Each selection must include a beat and licence." };
+    }
+    const beatId = cleanText(
+      String(item.beat_id ?? item.beatId ?? item.id ?? ""),
+      80
+    ).toLowerCase();
+    const licenceKey = cleanText(
+      String(item.licence_key ?? item.licenceKey ?? item.key ?? item.licence ?? ""),
+      64
+    ).toLowerCase();
+    if (!validId(beatId) || !validLicenceKey(licenceKey)) {
+      return { error: "Each selected beat and licence key must be valid." };
+    }
+    const key = `${beatId}:${licenceKey}`;
+    if (seen.has(key)) {
+      return { error: "Duplicate beat and licence selections are not allowed." };
+    }
+    seen.add(key);
+    items.push({ beat_id: beatId, licence_key: licenceKey });
+  }
+
+  return { items };
+}
+
+async function resolveLicensingCheckout(data, env) {
+  const emailValue = cleanText(typeof data.email === "string" ? data.email : "", 254);
+  if (!emailValue || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
+    return { error: "Please provide a valid email address." };
+  }
+
+  const normalized = normalizeLicensingSelection(data);
+  if (normalized.error) return normalized;
+
+  const selections = [];
+  let total = 0;
+
+  for (const { beat_id, licence_key } of normalized.items) {
+    const beat = await env.DB.prepare(
+      "SELECT id, title, status, category FROM beats WHERE id = ?"
+    ).bind(beat_id).first();
+
+    if (!beat || beat.status !== "published" || beat.category !== "beats") {
+      return { error: `Beat ${beat_id} is unavailable for purchase.` };
+    }
+
+    const exclusive = await env.DB.prepare(
+      "SELECT beat_id FROM exclusive_sales WHERE beat_id = ?"
+    ).bind(beat_id).first();
+    if (exclusive) {
+      return { error: `Beat ${beat_id} has already been sold exclusively.` };
+    }
+
+    const licence = await env.DB.prepare(
+      "SELECT licence_key, label, enabled FROM licences WHERE licence_key = ?"
+    ).bind(licence_key).first();
+    if (!licence) {
+      return { error: `Licence ${licence_key} is not recognised.` };
+    }
+    if (!licence.enabled) {
+      return { error: `Licence ${licence_key} is disabled.` };
+    }
+
+    const offering = await env.DB.prepare(
+      "SELECT beat_id, licence_key, price, package_key, enabled FROM beat_licences WHERE beat_id = ? AND licence_key = ?"
+    ).bind(beat_id, licence_key).first();
+    if (!offering || !offering.enabled) {
+      return { error: `Licence ${licence_key} is unavailable for beat ${beat_id}.` };
+    }
+    if (!Number.isSafeInteger(Number(offering.price)) || Number(offering.price) < 1) {
+      return { error: `Licence ${licence_key} for beat ${beat_id} has an invalid price.` };
+    }
+    if (typeof offering.package_key !== "string" || !offering.package_key.trim()) {
+      return { error: `Licence ${licence_key} for beat ${beat_id} is missing a package key.` };
+    }
+
+    const price = Number(offering.price);
+    total += price;
+    selections.push({
+      beat_id,
+      beat_title: beat.title,
+      licence_key,
+      licence_label: licence.label,
+      price,
+      package_key: offering.package_key.trim()
+    });
+  }
+
+  if (!Number.isSafeInteger(total) || total < 1) {
+    return { error: "The order total is not valid." };
+  }
+
+  return {
+    email: emailValue,
+    total,
+    amount: total * 100,
+    selections,
+    itemCount: selections.length
+  };
+}
+
+async function handleLicensingCheckout(request, env) {
+  if (!env.DB) {
+    return json({ success: false, status: false, error: "Database is not configured." }, 500);
+  }
+
+  let data;
+  try {
+    data = await request.json();
+  } catch {
+    return json({ success: false, status: false, error: "Invalid request." }, 400);
+  }
+
+  const resolved = await resolveLicensingCheckout(data, env);
+  if (resolved.error) {
+    return json({ success: false, status: false, error: resolved.error }, 400);
+  }
+
+  const orderId = uniqueId("ord");
+  let reference = uniqueOrderReference();
+  let createdOrder = null;
+
+  try {
+    await runAtomicD1Transaction(env, async () => {
+      const orderInsert = await env.DB.prepare(
+        `INSERT INTO orders (id, reference, email, currency, amount, status, provider, created_at, updated_at)
+         VALUES (?, ?, ?, 'NGN', ?, 'pending', 'paystack', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      ).bind(orderId, reference, resolved.email, resolved.amount).run();
+
+      if (!orderInsert || Number(orderInsert.meta?.changes || 0) < 1) {
+        throw new Error("Unable to create order.");
+      }
+
+      const itemRows = [];
+      for (const selection of resolved.selections) {
+        const itemId = uniqueId("item");
+        const inserted = await env.DB.prepare(
+          "INSERT INTO order_items (id, order_id, beat_id, beat_title, licence_key, licence_label, price, package_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+        ).bind(
+          itemId,
+          orderId,
+          selection.beat_id,
+          selection.beat_title,
+          selection.licence_key,
+          selection.licence_label,
+          selection.price,
+          selection.package_key
+        ).run();
+
+        if (!inserted || Number(inserted.meta?.changes || 0) < 1) {
+          throw new Error("Unable to create order items.");
+        }
+
+        itemRows.push({
+          id: itemId,
+          order_id: orderId,
+          beat_id: selection.beat_id,
+          beat_title: selection.beat_title,
+          licence_key: selection.licence_key,
+          licence_label: selection.licence_label,
+          price: selection.price,
+          package_key: selection.package_key
+        });
+      }
+
+      createdOrder = {
+        id: orderId,
+        reference,
+        email: resolved.email,
+        currency: "NGN",
+        amount: resolved.amount,
+        total: resolved.total,
+        status: "pending",
+        items: itemRows
+      };
+    });
+  } catch (error) {
+    if (String(error).includes("UNIQUE") || String(error).includes("constraint")) {
+      reference = uniqueOrderReference();
+      try {
+        await runAtomicD1Transaction(env, async () => {
+          const retryOrderId = uniqueId("ord");
+          const orderInsert = await env.DB.prepare(
+            `INSERT INTO orders (id, reference, email, currency, amount, status, provider, created_at, updated_at)
+             VALUES (?, ?, ?, 'NGN', ?, 'pending', 'paystack', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+          ).bind(retryOrderId, reference, resolved.email, resolved.amount).run();
+          if (!orderInsert || Number(orderInsert.meta?.changes || 0) < 1) {
+            throw new Error("Unable to create order.");
+          }
+
+          const itemRows = [];
+          for (const selection of resolved.selections) {
+            const itemId = uniqueId("item");
+            const inserted = await env.DB.prepare(
+              "INSERT INTO order_items (id, order_id, beat_id, beat_title, licence_key, licence_label, price, package_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+            ).bind(
+              itemId,
+              retryOrderId,
+              selection.beat_id,
+              selection.beat_title,
+              selection.licence_key,
+              selection.licence_label,
+              selection.price,
+              selection.package_key
+            ).run();
+            if (!inserted || Number(inserted.meta?.changes || 0) < 1) {
+              throw new Error("Unable to create order items.");
+            }
+            itemRows.push({
+              id: itemId,
+              order_id: retryOrderId,
+              beat_id: selection.beat_id,
+              beat_title: selection.beat_title,
+              licence_key: selection.licence_key,
+              licence_label: selection.licence_label,
+              price: selection.price,
+              package_key: selection.package_key
+            });
+          }
+          createdOrder = {
+            id: retryOrderId,
+            reference,
+            email: resolved.email,
+            currency: "NGN",
+            amount: resolved.amount,
+            total: resolved.total,
+            status: "pending",
+            items: itemRows
+          };
+        });
+      } catch (retryError) {
+        console.error("Licensing checkout order retry failed:", retryError);
+        return json({ success: false, status: false, error: "Unable to create your order at this time." }, 500);
+      }
+    } else {
+      console.error("Licensing checkout failed:", error);
+      return json({ success: false, status: false, error: "Unable to create your order at this time." }, 500);
+    }
+  }
+
+  const response = {
+    success: true,
+    status: true,
+    order: {
+      id: createdOrder.id,
+      reference: createdOrder.reference,
+      email: createdOrder.email,
+      currency: createdOrder.currency,
+      amount: createdOrder.amount,
+      total: createdOrder.total,
+      status: createdOrder.status
+    },
+    items: createdOrder.items,
+    total: createdOrder.total,
+    amount: createdOrder.amount,
+    currency: createdOrder.currency,
+    reference: createdOrder.reference,
+    itemCount: createdOrder.items.length
+  };
+
+  return json(response, 201);
 }
 
 async function verifyPaystackTransaction(reference, env) {
@@ -1500,6 +1821,27 @@ export default {
           "Vary": "Origin"
         }
       });
+    }
+
+    const licensingCheckoutPaths = new Set([
+      "/api/checkout",
+      "/api/checkout/validate",
+      "/api/checkout/licensing",
+      "/api/create-order",
+      "/api/create-licensing-order",
+      "/api/licensing-order"
+    ]);
+
+    if (
+      request.method === "POST" &&
+      licensingCheckoutPaths.has(path)
+    ) {
+      try {
+        return await handleLicensingCheckout(request, env);
+      } catch (error) {
+        console.error("Licensing checkout error:", error);
+        return json({ success: false, status: false, error: "Unable to create your order at this time." }, 500);
+      }
     }
 
     if (path === "/api/paystack-webhook" && request.method === "POST") {
