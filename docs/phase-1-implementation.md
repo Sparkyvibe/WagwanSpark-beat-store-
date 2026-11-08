@@ -178,9 +178,9 @@ Phase 2.
 4. **Migration order on a fresh database.** `0002` reads `beats`, which the
    migrations do not create; the schema must exist first. On an empty database
    the migration fails loudly rather than silently backfilling nothing.
-5. **Foreign keys are declared but not enforced** by SQLite/D1 by default, so
-   referential integrity between `order_items`/`orders`/`entitlements` is the
-   application's responsibility.
+5. **Foreign-key constraints are not declared** in the Phase 1 schema.
+   Referential integrity between orders, order items, entitlements and
+   related records must therefore be maintained by application-level validation.
 6. **Timestamps must stay in `YYYY-MM-DD HH:MM:SS` UTC.** Later code must not mix
    ISO-8601 `T`/`Z` strings into these columns, or `expires_at <=
    CURRENT_TIMESTAMP` comparisons break.
