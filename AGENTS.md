@@ -8,6 +8,12 @@
 - `env.BEATS_BUCKET` — R2 bucket for artwork, preview audio and ZIPs
 - `env.ASSETS` — static storefront from `public/` (all `/api/*` routes are handled by the Worker)
 
+Worker entry point: `wrangler.toml` `main` points at `src/phase3-worker.js`,
+which handles the licensing payment/fulfilment/download routes and delegates
+everything else to `src/phase2-worker.js` (licensing order creation), which in
+turn delegates to `src/index.js` (the original store worker). Add new routes to
+the outermost layer and keep that delegation chain intact.
+
 The `start`/`dev` scripts in `package.json` are stale (there is no index.js at the root and `nodemon` is not even a dependency) — ignore them. Local development runs the Worker through `wrangler dev`, which emulates D1, R2 and the assets binding.
 
 ## Running it
@@ -62,7 +68,7 @@ preview script by pointing a same-origin `<iframe>` at `/samples` or
 
 Every route needs the `beats` table, so `.base44/schema.sql` creates it (columns inferred from the SQL in `src/index.js`); `published_at`, `featured_position` and `catalogue_position` are added lazily by the Worker on first use.
 
-Licensing tables (Phase 1 on) are owned by `migrations/` and applied with `wrangler d1 migrations apply DB --local --persist-to /data/state` — `.base44/dev-setup.sh` runs this after the seed. Nothing reads those tables yet, so they change no behaviour. See `docs/migrations.md` for the apply and recovery runbook; never apply them to a remote database without approval.
+Licensing tables (Phase 1 on) are owned by `migrations/` and applied with `wrangler d1 migrations apply DB --local --persist-to /data/state` — `.base44/dev-setup.sh` runs this after the seed. Phase 2 writes `orders`/`order_items`; Phase 3 adds payment, fulfilment and entitlement downloads over them (see `docs/phase-3-implementation.md`). See `docs/migrations.md` for the apply and recovery runbook; never apply them to a remote database without approval.
 
 ### Secrets
 
@@ -78,6 +84,16 @@ curl -s -o /dev/null -w '%{http_code} %{content_type}\n' http://localhost:3000/a
 curl -s -X POST http://localhost:3000/api/admin/login -H 'Content-Type: application/json' \
   -d '{"password":"wagwanspark-admin"}'                     # 200 + ws_admin_session cookie
 ```
+
+Tests run inside the container (no host runtime needed):
+
+```bash
+docker compose -f docker-compose.base44.yml exec -T store node --test tests/*.test.mjs
+```
+
+They cover the Phase 1 migrations, Phase 2 order creation and the Phase 3
+payment/fulfilment/download routes; Paystack calls are stubbed, so no live
+payment request is made.
 
 Admin panel: `/admin` (or `/admin.html`). The session cookie is `Path=/api/admin`, `Secure`, `SameSite=Strict`; `GET /api/admin/session` reports 401 when signed out.
 

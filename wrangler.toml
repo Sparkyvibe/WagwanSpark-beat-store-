@@ -1,5 +1,5 @@
 name = "wagwanspark-beat-store"
-main = "src/phase2-worker.js"
+main = "src/phase3-worker.js"
 compatibility_date = "2024-01-15"
 
 [assets]
