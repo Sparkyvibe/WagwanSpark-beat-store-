@@ -1806,12 +1806,15 @@
   }
 
   // Featured beats in the admin-chosen order. Products featured before
-  // ordering existed have no position and follow in the catalogue order.
+  // ordering existed have no position (NULL) and sort first in their
+  // catalogue order; explicitly positioned beats follow after them.
+  // A newly featured beat gets a position after all existing featured
+  // beats (including NULL-positioned ones), so it appears at the end.
   function featuredBeats() {
     const position = product => {
       const value = Number(product.featured_position);
       return product.featured_position != null &&
-        Number.isInteger(value) && value > 0 ? value : Infinity;
+        Number.isInteger(value) && value > 0 ? value : 0;
     };
 
     return state.products.beats
