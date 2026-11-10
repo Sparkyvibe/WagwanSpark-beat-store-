@@ -24,7 +24,7 @@ docker compose -f docker-compose.base44.yml logs -f store    # Worker logs
 ```
 
 - `store` serves the Worker + assets on port 3000 with the repo bind-mounted, so source edits are picked up without a rebuild (multi-page site, so hard-refresh the browser — there is no SPA router).
-- `setup` is a one-shot service that runs before `store`: `.base44/dev-setup.sh` applies `.base44/schema.sql`, inserts the demo catalogue (`.base44/demo-products.sql`), applies the `migrations/` licensing migrations and uploads the demo artwork/preview files into local R2. It is idempotent (`IF NOT EXISTS` / `INSERT OR IGNORE` / overwriting puts).
+- `setup` is a one-shot service that runs before `store`, in this order: `.base44/schema.sql` → the demo catalogue (`.base44/demo-products.sql`, which carries each demo beat's package key) → the demo artwork/preview media → the demo **package ZIPs** (`.base44/demo-packages.mjs`) → the `migrations/` licensing migrations → the local licence reconciliation (`.base44/demo-licences.sql`). Packages are uploaded *before* the migrations on purpose: `0002` grants a beat its existing `zip_key`, so the object must already exist or a tier would point at nothing. It is idempotent (`IF NOT EXISTS` / `INSERT OR IGNORE` / overwriting media puts / package puts skipped when the object is already there).
 - D1 + R2 state lives in the `wrangler-state` volume at `/data/state` (not in the repo). `docker compose -f docker-compose.base44.yml down -v` wipes it and the next `up` re-seeds.
 
 ## Frontend structure (Sonic Kinetics redesign)
@@ -83,11 +83,15 @@ through the runner, never by hand.
   payment start and fulfilment. **Reservations never expire by themselves** —
   only an admin release (`POST /api/admin/exclusive/reservations/release`) frees
   one. A sold beat blocks every licence, for good.
-- The seed data has no `zip_key` on its demo products, so Phase 1 flagged them in
-  `licence_backfill_issues` and `GET /api/beat-licences` returns no tiers locally.
-  Beat cards then show no licence picker and checkout falls back to the legacy
-  `/api/create-payment` flow. Insert `beat_licences` rows to exercise the tiered
-  flow (and delete them afterwards — they are real prices).
+- The demo catalogue ships a real package per beat: `zip_key` is the versioned
+  key `beats/<id>-v1.zip`, and `.base44/demo-packages.mjs` generates that archive
+  deterministically (a STORED ZIP holding the preview audio plus a licence note).
+  `setup` uploads it before the migrations, so `0002` grants each demo beat its
+  single `mp3_wav` tier at the beat's own price and `GET /api/beat-licences`
+  returns them. `setup` also re-runs `0002` and applies
+  `.base44/demo-licences.sql`, so a sandbox seeded before the packages existed is
+  repaired as well. A `zip_key` that is already set is never repointed, and a
+  package object that already exists is never overwritten.
 - Admin ZIP uploads write versioned keys (`-v<n>.zip`); the previous object is
   never overwritten. Never delete an object a past order or entitlement records.
 
@@ -121,6 +125,6 @@ Admin panel: `/admin` (or `/admin.html`). The session cookie is `Path=/api/admin
 ## Known sandbox limitations
 
 - `CALLBACK_URL` in `src/index.js` is hardcoded to the production Worker. A real Paystack payment therefore redirects to production, not back to the sandbox — open `/success?reference=<reference>` manually to finish the flow locally.
-- The seeded demo products have no `zip_key`, so a download for them returns "Download file not found in storage". Upload a ZIP from the admin panel to make one downloadable.
+- The seeded demo beats now have a package (`beats/<id>-v1.zip`), so a download works — but it contains the demo preview audio, not a master. Replace the package from the admin panel to test a real delivery.
 - The idle mini audio player renders `<img src="">`, which logs one failed-image console error on page load (pre-existing, no visual impact).
 - `BASE44_PREVIEW_MODE` is passed through to the `store` service and into `.dev.vars` for sandbox-only overrides; when it is unset or anything other than `"1"`, application behaviour is unchanged.

@@ -31,6 +31,38 @@ rewritten and a code rollback does not require undoing it.
 > There is no `0003_*.sql` in this repository. The number was reserved for an
 > exclusive-inventory migration that is not present on any branch; `0004` keeps
 > that slot free. Gaps are harmless — D1 applies migrations in filename order.
+>
+> **Audited (Phase 4 follow-up).** Nothing is missing: the exclusive-inventory
+> schema was consolidated into `0001_licensing_schema.sql` rather than split into
+> a `0003`. That file creates `exclusive_sales` (PRIMARY KEY on `beat_id`, the
+> row that permanently blocks a resale), `exclusive_reservations` with the
+> partial unique index `idx_exclusive_reservations_active` that makes "at most one
+> active hold per beat" atomic, `exclusive_offers`, and `licence_events`. The
+> rules those tables enforce live in `src/licensing-inventory.js` and are applied
+> at order creation, payment start and fulfilment. No `0003` file is needed, and
+> none was applied anywhere: local `d1_migrations` records exactly `0001`,
+> `0002`, `0004`.
+
+## Local demo packages (development only, not a migration)
+
+`GET /api/beat-licences` returned `[]` in the sandbox because the demo beats were
+seeded with `zip_key = NULL`, so `0002` recorded them in
+`licence_backfill_issues` and granted no tier. The fix is in the seed, not in a
+migration — `migrations/` is unchanged:
+
+1. `.base44/demo-products.sql` gives each demo beat the versioned key
+   `beats/<id>-v1.zip`, and fills that key on an existing row only when it is
+   still empty (a set key is never repointed).
+2. `.base44/demo-packages.mjs` builds the matching archive — deterministic
+   STORED ZIP of the preview audio plus a licence note — so the key names a real
+   object rather than an invented path.
+3. `.base44/dev-setup.sh` uploads those archives **before** `wrangler d1
+   migrations apply`, skips a put when the object already exists, then re-runs
+   `0002` (idempotent) and applies `.base44/demo-licences.sql`, which withdraws
+   the now-resolved `missing_package` exceptions. That re-run repairs a sandbox
+   whose `0002` had already been recorded as applied.
+
+Production is unaffected: none of this runs against a remote database.
 
 ## Running them
 
