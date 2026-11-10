@@ -109,9 +109,31 @@
         if (!response.ok || !result.success) {
           throw new Error(result.error || "Payment verification failed.");
         }
-        // Supports both the multi-beat response and the original
-        // single-beat response format.
-        let beats = Array.isArray(result.beats) ? result.beats : [];
+        if (result.manualReview) {
+          content.replaceChildren();
+          const icon = document.createElement("div");
+          icon.className = "icon";
+          icon.textContent = "⏳";
+          const title = document.createElement("h1");
+          title.textContent = "Payment Received";
+          const message = document.createElement("p");
+          message.className = "note";
+          message.textContent =
+            "Your payment went through, but an item in this order needs a quick review by our team. " +
+            "We'll email your download links to the address on the order. Please don't pay again.";
+          content.append(icon, title, message);
+          return;
+        }
+        // Supports the licensing response (one link per purchased item, any
+        // category), the multi-beat response and the original single-beat
+        // response format.
+        let beats = Array.isArray(result.downloads) && result.licensing
+          ? result.downloads.map(download => ({
+            beatTitle: download.title || download.beat_title,
+            beatLabel: download.licence_label,
+            downloadUrl: download.download_url
+          }))
+          : Array.isArray(result.beats) ? result.beats : [];
         if (beats.length === 0 && result.downloadUrl) {
           beats = [{
             beatTitle: result.beatTitle || "Your beat",
@@ -123,16 +145,17 @@
           beats.some(beat =>
             typeof beat.beatTitle !== "string" ||
             typeof beat.downloadUrl !== "string" ||
-            !beat.downloadUrl.startsWith(window.location.origin + "/api/download?")
+            !beat.downloadUrl.startsWith(window.location.origin + "/api/download?") &&
+            !beat.downloadUrl.startsWith(window.location.origin + "/api/licensing/download?")
           )
         ) {
           throw new Error("We couldn't prepare your download links. Please contact support.");
         }
         const heading = beats.length === 1
-          ? "Your purchase of 1 beat is confirmed."
-          : `Your purchase of ${beats.length} beats is confirmed.`;
+          ? "Your purchase of 1 item is confirmed."
+          : `Your purchase of ${beats.length} items is confirmed.`;
         const intro = document.createElement("p");
-        intro.textContent = heading + " Your beats are ready for download.";
+        intro.textContent = heading + " Your files are ready for download.";
         const list = document.createElement("div");
         list.className = "downloads";
         beats.forEach(beat => {
@@ -140,7 +163,9 @@
           item.className = "download-item";
           const name = document.createElement("span");
           name.className = "beat-name";
-          name.textContent = beat.beatTitle;
+          name.textContent = beat.beatLabel
+            ? `${beat.beatTitle} — ${beat.beatLabel}`
+            : beat.beatTitle;
           const link = document.createElement("a");
           link.className = "download";
           link.href = beat.downloadUrl;

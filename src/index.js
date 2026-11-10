@@ -1,3 +1,5 @@
+import { nextPackageVersion } from "./licensing-inventory.js";
+
 const LEGACY_BEATS = {
   "sun-fire": { title: "SUN FIRE", price: 7000, candidates: ["beats/SUN FIRE.zip", "SUN FIRE.zip"] },
   phenomenal: { title: "PHENOMENAL", price: 7000, candidates: ["beats/PHENOMENAL.zip", "PHENOMENAL.zip"] },
@@ -658,7 +660,11 @@ async function getVerifiedPurchase(transaction, env) {
   return { products, beats: products, email };
 }
 
-async function sendPurchaseEmail(env, email, reference, products, origin) {
+// Posts one message through the existing Google Apps Script endpoint and
+// validates its reply. Shared by the legacy purchase email and the licensing
+// fulfilment email (`src/licensing-checkout.js`) so there is a single outbound
+// path and a single set of secrets.
+async function sendEmailMessage(env, { to, subject, body }) {
   if (!env.EMAIL_SCRIPT_URL || !env.EMAIL_SHARED_SECRET) {
     throw new Error("Email delivery secrets are not configured.");
   }
@@ -668,6 +674,34 @@ async function sendPurchaseEmail(env, email, reference, products, origin) {
   ) {
     throw new Error("EMAIL_SCRIPT_URL is not a valid Apps Script URL.");
   }
+  const response = await fetch(env.EMAIL_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      secret: env.EMAIL_SHARED_SECRET,
+      to,
+      subject,
+      body
+    }),
+    redirect: "follow"
+  });
+  const responseText = await response.text();
+  if (!response.ok) {
+    throw new Error("Google email endpoint returned an HTTP error.");
+  }
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    throw new Error("Google email endpoint response was not valid JSON.");
+  }
+  if (!result.success) {
+    throw new Error("Google email endpoint did not confirm delivery.");
+  }
+  return true;
+}
+
+async function buildPurchaseEmail(env, email, reference, products) {
   const downloadLines = [];
   for (const product of products) {
     const token = await createDownloadToken({
@@ -699,31 +733,12 @@ async function sendPurchaseEmail(env, email, reference, products, origin) {
     "",
     "WagwanSpark — Let the vibe be your guide."
   ].join("\n");
-  const response = await fetch(env.EMAIL_SCRIPT_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      secret: env.EMAIL_SHARED_SECRET,
-      to: email,
-      subject,
-      body
-    }),
-    redirect: "follow"
-  });
-  const responseText = await response.text();
-  if (!response.ok) {
-    throw new Error("Google email endpoint returned an HTTP error.");
-  }
-  let result;
-  try {
-    result = JSON.parse(responseText);
-  } catch {
-    throw new Error("Google email endpoint response was not valid JSON.");
-  }
-  if (!result.success) {
-    throw new Error("Google email endpoint did not confirm delivery.");
-  }
-  return true;
+  return { subject, body };
+}
+
+async function sendPurchaseEmail(env, email, reference, products) {
+  const message = await buildPurchaseEmail(env, email, reference, products);
+  return sendEmailMessage(env, { to: email, ...message });
 }
 
 // ==========================================
@@ -732,7 +747,10 @@ async function sendPurchaseEmail(env, email, reference, products, origin) {
 // A payment reference can be emailed successfully only once.
 // Failed or stale deliveries can be retried.
 // ==========================================
-async function deliverPurchaseEmailOnce(env, reference, email, products) {
+// One delivery per reference, whatever built the message. `buildMessage` is
+// awaited only after this caller has claimed the reference, so a retry that
+// loses the claim never sends anything.
+async function deliverEmailOnce(env, reference, email, buildMessage) {
   if (!env.DB) {
     throw new Error("Database binding is missing for email delivery.");
   }
@@ -793,7 +811,8 @@ async function deliverPurchaseEmailOnce(env, reference, email, products) {
   }
 
   try {
-    await sendPurchaseEmail(env, email, reference, products, STORE_ORIGIN);
+    const message = await buildMessage();
+    await sendEmailMessage(env, { to: email, ...message });
 
     await env.DB.prepare(
       "UPDATE email_deliveries SET status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE reference = ?"
@@ -807,6 +826,11 @@ async function deliverPurchaseEmailOnce(env, reference, email, products) {
 
     throw error;
   }
+}
+
+async function deliverPurchaseEmailOnce(env, reference, email, products) {
+  return deliverEmailOnce(env, reference, email,
+    () => buildPurchaseEmail(env, email, reference, products));
 }
 
 async function handlePaystackWebhook(request, env, url) {
@@ -1181,9 +1205,14 @@ async function handleAdmin(request, env, url) {
       if (file.size > maxBytes) {
         return json({ error: "ZIP must be 100 MB or smaller." }, 413);
       }
-      key = category === "beats"
-        ? `beats/${id}.zip`
-        : `products/${category}/${id}.zip`;
+      // Immutable, versioned package keys. A replacement upload writes a NEW
+      // object and only moves the catalogue pointer, so an object an order or
+      // entitlement already records is never overwritten. Nothing here deletes
+      // a previous version.
+      const zipBase = category === "beats"
+        ? `beats/${id}`
+        : `products/${category}/${id}`;
+      key = `${zipBase}-v${nextPackageVersion(product.zip_key)}.zip`;
       column = "zip_key";
       contentType = "application/zip";
     } else {
@@ -1964,4 +1993,14 @@ export default {
 
     return env.ASSETS.fetch(request);
   }
+};
+
+// Shared with the licensing layers built on top of this Worker.
+//   deliverEmailOnce / sendEmailMessage — the one outbound email path.
+//   requireAdmin / getAdminSession      — the existing admin session checks.
+export {
+  deliverEmailOnce,
+  getAdminSession,
+  requireAdmin,
+  sendEmailMessage
 };

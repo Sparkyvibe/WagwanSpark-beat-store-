@@ -20,9 +20,24 @@
 // Money rules: the client never supplies an amount. The Paystack amount is the
 // stored `orders.amount` (kobo) and a verified transaction must match it.
 // ==========================================
+import { deliverEmailOnce } from "./index.js";
+import {
+  findInventoryConflict,
+  inventoryConflictMessage
+} from "./licensing-inventory.js";
+
 const PAYSTACK_API = "https://api.paystack.co";
 const MAX_REQUEST_BYTES = 16 * 1024;
 const VERIFY_DOWNLOAD_TOKEN_LIFETIME = 30 * 60 * 1000;
+const EMAIL_DOWNLOAD_TOKEN_LIFETIME = 7 * 24 * 60 * 60 * 1000;
+
+// Links in the purchase email must be absolute. The legacy purchase email
+// hardcodes the production origin; this one allows the same value to be
+// supplied by the environment (the sandbox preview needs its own host) and
+// falls back to the production origin exactly as before.
+function storeOrigin(env) {
+  return env.STORE_ORIGIN || "https://wagwanspark.com.ng";
+}
 
 function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
@@ -142,15 +157,99 @@ async function loadOrderItems(env, orderId) {
   return result.results || [];
 }
 
-async function findSoldExclusiveBeat(env, items) {
-  for (const item of items) {
-    if (item.licence_key !== "exclusive") continue;
-    const sold = await env.DB.prepare(
-      "SELECT beat_id FROM exclusive_sales WHERE beat_id = ?"
-    ).bind(item.beat_id).first();
-    if (sold) return item.beat_id;
+async function loadEntitlements(env, orderId) {
+  const result = await env.DB.prepare(
+    `SELECT e.id, e.order_id, e.order_item_id, e.reference, e.email, e.beat_id,
+            e.licence_key, e.package_key, e.category, e.status,
+            i.beat_title, i.licence_label
+       FROM entitlements e
+       LEFT JOIN order_items i ON i.id = e.order_item_id
+      WHERE e.order_id = ?
+      ORDER BY e.created_at, e.id`
+  ).bind(orderId).all();
+  return result.results || [];
+}
+
+// One signed, entitlement-scoped link per purchased item. The token carries the
+// product, the licence and the category; the package key is never in the token
+// because it is read from the entitlement at download time.
+async function buildDownloadLinks(env, order, rows, lifetime, origin) {
+  const downloads = [];
+  for (const row of rows) {
+    if (row.status !== "active") continue;
+    const token = await createSignedToken({
+      reference: order.reference,
+      beatId: row.beat_id,
+      licenceKey: row.licence_key,
+      category: row.category || "beats",
+      exp: Date.now() + lifetime
+    }, env.PAYSTACK_SECRET_KEY);
+    downloads.push({
+      product_id: row.beat_id,
+      beat_id: row.beat_id,
+      title: row.beat_title || row.beat_id,
+      beat_title: row.beat_title || row.beat_id,
+      category: row.category || "beats",
+      licence_key: row.licence_key,
+      licence_label: row.licence_label || row.licence_key,
+      download_url: `${origin}/api/licensing/download?token=${encodeURIComponent(token)}`
+    });
   }
-  return null;
+  return downloads;
+}
+
+function buildLicensingEmail(reference, downloads) {
+  const subject = downloads.length === 1
+    ? `WagwanSpark — ${downloads[0].title} Download`
+    : "WagwanSpark — Your Downloads";
+
+  const lines = [];
+  for (const download of downloads) {
+    lines.push(`${download.title} (${download.licence_label})`);
+    lines.push(`Download: ${download.download_url}`);
+    lines.push("");
+  }
+
+  const body = [
+    "Thank you for purchasing from WagwanSpark.",
+    "",
+    "Your payment has been verified. Your download link(s) are below:",
+    "",
+    ...lines,
+    "IMPORTANT:",
+    "• These secure download links expire in 7 days.",
+    "• Each link downloads the exact package version you purchased.",
+    "• Do not share your download links publicly.",
+    "",
+    `Payment reference: ${reference}`,
+    "",
+    "WagwanSpark — Let the vibe be your guide."
+  ].join("\n");
+
+  return { subject, body };
+}
+
+// Exactly one email per paid order, through the Worker's existing
+// email_deliveries claim (same table and provider as the legacy purchase
+// email). A retry that loses the claim sends nothing.
+async function deliverLicensingEmail(env, order, rows) {
+  const downloads = await buildDownloadLinks(
+    env,
+    order,
+    rows,
+    EMAIL_DOWNLOAD_TOKEN_LIFETIME,
+    storeOrigin(env)
+  );
+  if (!downloads.length) {
+    return { sent: false, duplicate: false, skipped: true };
+  }
+  const delivery = await deliverEmailOnce(
+    env,
+    order.reference,
+    order.email,
+    async () => buildLicensingEmail(order.reference, downloads)
+  );
+  return delivery;
 }
 
 async function logEvents(env, statements, entityId, eventType, actor, payload) {
@@ -256,11 +355,13 @@ export async function handleLicensingCreatePayment(request, env, url) {
     return json({ success: false, error: "This order has no items." }, 409);
   }
 
-  const soldBeat = await findSoldExclusiveBeat(env, items);
-  if (soldBeat) {
+  // Inventory is re-checked here, not just at order creation: a beat can be
+  // reserved or sold between the two calls.
+  const conflict = await findInventoryConflict(env, items);
+  if (conflict) {
     return json({
       success: false,
-      error: "This beat has already been sold exclusively."
+      error: inventoryConflictMessage(conflict)
     }, 409);
   }
 
@@ -371,12 +472,76 @@ export async function fulfilLicensingOrder(env, reference, actor) {
     return { handled: true, status: order.status, entitlements: 0 };
   }
 
+  // Already fulfilled. Repeat webhook deliveries and a late verify-payment call
+  // must not grant a second round of rights (an exclusive order would otherwise
+  // collide with its own exclusive_sales row and be parked for review).
+  if (order.status === "paid") {
+    const granted = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM entitlements WHERE order_id = ?"
+    ).bind(order.id).first();
+
+    // The only thing left to retry is a delivery that never completed: the
+    // email_deliveries claim makes this safe to attempt again, and a delivery
+    // already marked 'sent' is never repeated.
+    let email = { sent: false, duplicate: true, error: false };
+    const delivery = await env.DB.prepare(
+      "SELECT status FROM email_deliveries WHERE reference = ?"
+    ).bind(order.reference).first();
+    if (delivery?.status !== "sent") {
+      try {
+        const retried = await deliverLicensingEmail(
+          env,
+          order,
+          await loadEntitlements(env, order.id)
+        );
+        email = {
+          sent: retried.sent === true,
+          duplicate: retried.duplicate === true,
+          error: false
+        };
+      } catch (error) {
+        console.error("Licensing purchase email retry failed:", error);
+        email.error = true;
+      }
+    }
+
+    return {
+      handled: true,
+      status: "paid",
+      entitlements: Number(granted?.count || 0),
+      duplicate: true,
+      email
+    };
+  }
+
   const transaction = await verifyPaystackTransaction(reference, env);
   assertTransactionMatchesOrder(transaction, order);
 
   const items = await loadOrderItems(env, order.id);
   if (!items.length) {
     throw new Error("Licensing order has no items.");
+  }
+
+  // Third inventory check (after order creation and payment start): a beat can
+  // be reserved or sold while the buyer is on the Paystack page.
+  const conflict = await findInventoryConflict(env, items);
+  if (conflict) {
+    const parked = [];
+    parked.push(env.DB.prepare(
+      "UPDATE orders SET status = 'manual_review', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('pending', 'paid')"
+    ).bind(order.id));
+    await logEvents(env, parked, order.id, "inventory_conflict", actor, {
+      reference: order.reference,
+      reason: conflict.reason,
+      beatId: conflict.beatId,
+      licenceKey: conflict.licenceKey
+    });
+    try {
+      await env.DB.batch(parked);
+    } catch (parkError) {
+      console.error("Licensing manual-review write failed:", parkError);
+    }
+    return { handled: true, status: "manual_review", entitlements: 0 };
   }
 
   const statements = [];
@@ -387,8 +552,9 @@ export async function fulfilLicensingOrder(env, reference, actor) {
   for (const item of items) {
     statements.push(env.DB.prepare(
       `INSERT OR IGNORE INTO entitlements
-        (id, order_id, order_item_id, reference, email, beat_id, licence_key, package_key)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        (id, order_id, order_item_id, reference, email, beat_id, licence_key,
+         package_key, category, package_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       `ent_${randomHex(12)}`,
       order.id,
@@ -397,7 +563,9 @@ export async function fulfilLicensingOrder(env, reference, actor) {
       order.email,
       item.beat_id,
       item.licence_key,
-      item.package_key
+      item.package_key,
+      item.category || "beats",
+      item.package_version ?? null
     ));
   }
 
@@ -454,6 +622,36 @@ export async function fulfilLicensingOrder(env, reference, actor) {
     console.error("Licensing order event write failed:", error);
   }
 
+  // One email per paid order, covering every item. Fulfilment stands even when
+  // the provider call fails: the entitlements are already granted, and a later
+  // webhook retry or verify-payment call reclaims the failed delivery row.
+  let email = { sent: false, duplicate: false, error: false };
+  try {
+    const delivery = await deliverLicensingEmail(
+      env,
+      order,
+      await loadEntitlements(env, order.id)
+    );
+    email = {
+      sent: delivery.sent === true,
+      duplicate: delivery.duplicate === true,
+      error: false
+    };
+  } catch (error) {
+    console.error("Licensing purchase email failed:", error);
+    email.error = true;
+    const failures = [];
+    await logEvents(env, failures, order.id, "email_failed", actor, {
+      reference: order.reference,
+      message: String(error?.message || error).slice(0, 200)
+    });
+    try {
+      await env.DB.batch(failures);
+    } catch (logError) {
+      console.error("Licensing email failure log write failed:", logError);
+    }
+  }
+
   const granted = await env.DB.prepare(
     "SELECT COUNT(*) AS count FROM entitlements WHERE order_id = ?"
   ).bind(order.id).first();
@@ -461,7 +659,9 @@ export async function fulfilLicensingOrder(env, reference, actor) {
   return {
     handled: true,
     status: "paid",
-    entitlements: Number(granted?.count || 0)
+    entitlements: Number(granted?.count || 0),
+    duplicate: false,
+    email
   };
 }
 
@@ -571,28 +771,14 @@ export async function handleLicensingVerify(env, url) {
   }
 
   const items = await loadOrderItems(env, order.id);
-  const entitlements = await env.DB.prepare(
-    "SELECT beat_id, licence_key, package_key, status FROM entitlements WHERE order_id = ?"
-  ).bind(order.id).all();
-
-  const rows = entitlements.results || [];
-  const downloads = [];
-  if (env.PAYSTACK_SECRET_KEY) {
-    for (const row of rows) {
-      if (row.status !== "active") continue;
-      const token = await createSignedToken({
-        reference: order.reference,
-        beatId: row.beat_id,
-        licenceKey: row.licence_key,
-        exp: Date.now() + VERIFY_DOWNLOAD_TOKEN_LIFETIME
-      }, env.PAYSTACK_SECRET_KEY);
-      downloads.push({
-        beat_id: row.beat_id,
-        licence_key: row.licence_key,
-        download_url: `${url.origin}/api/licensing/download?token=${encodeURIComponent(token)}`
-      });
-    }
-  }
+  const rows = await loadEntitlements(env, order.id);
+  const downloads = await buildDownloadLinks(
+    env,
+    order,
+    rows,
+    VERIFY_DOWNLOAD_TOKEN_LIFETIME,
+    url.origin
+  );
 
   return json({
     success: true,
@@ -606,9 +792,14 @@ export async function handleLicensingVerify(env, url) {
       status: result.status || order.status
     },
     manualReview: result.status === "manual_review",
+    emailSent: result.email?.sent === true,
+    emailError: result.email?.error === true,
     items: items.map(item => ({
+      product_id: item.beat_id,
       beat_id: item.beat_id,
+      title: item.beat_title,
       beat_title: item.beat_title,
+      category: item.category || "beats",
       licence_key: item.licence_key,
       licence_label: item.licence_label,
       price: item.price

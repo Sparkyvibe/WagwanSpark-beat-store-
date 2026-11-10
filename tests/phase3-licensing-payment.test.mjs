@@ -13,6 +13,7 @@ const read = relativePath => readFileSync(join(root, relativePath), "utf8");
 const BASE_SCHEMA = read(".base44/schema.sql");
 const MIGRATION_SCHEMA = read("migrations/0001_licensing_schema.sql");
 const MIGRATION_BACKFILL = read("migrations/0002_backfill_legacy_licence.sql");
+const MIGRATION_UNIFIED = read("migrations/0004_unified_checkout.sql");
 
 const SECRET = "sk_test_phase3";
 
@@ -23,6 +24,7 @@ function makeDb() {
   sqlite.exec(BASE_SCHEMA);
   sqlite.exec(MIGRATION_SCHEMA);
   sqlite.exec(MIGRATION_BACKFILL);
+  sqlite.exec(MIGRATION_UNIFIED);
 
   for (const [id, title, price] of [
     ["beat-a", "Beat A", 5000],

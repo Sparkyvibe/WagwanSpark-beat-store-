@@ -13,6 +13,8 @@ import {
   handleLicensingVerify,
   handleLicensingWebhook
 } from "./licensing-checkout.js";
+import { handleAdminExclusive, isAdminExclusivePath } from "./admin-exclusive.js";
+import { handleBeatLicences } from "./licensing-catalogue.js";
 
 function fail(request, error) {
   console.error("Licensing route failed:", request.url, error);
@@ -57,6 +59,23 @@ export default {
           return phase2Worker.fetch(outcome.delegate, env, ctx);
         }
         if (outcome) return outcome;
+      } catch (error) {
+        return fail(request, error);
+      }
+    }
+
+    if (path === "/api/beat-licences" && request.method === "GET") {
+      try {
+        return await handleBeatLicences(env);
+      } catch (error) {
+        return fail(request, error);
+      }
+    }
+
+    if (isAdminExclusivePath(path)) {
+      try {
+        const response = await handleAdminExclusive(request, env, url);
+        if (response) return response;
       } catch (error) {
         return fail(request, error);
       }

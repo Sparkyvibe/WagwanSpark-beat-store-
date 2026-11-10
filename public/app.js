@@ -19,7 +19,10 @@
   const API = {
     beats: "/api/beats",
     products: "/api/products",
-    payment: "/api/create-payment"
+    payment: "/api/create-payment",
+    licences: "/api/beat-licences",
+    order: "/api/create-order",
+    orderPayment: "/api/licensing/create-payment"
   };
 
   const CART_STORAGE_KEY = "wagwanspark-cart-v3";
@@ -71,6 +74,8 @@
     },
     cart: [],
     cartItems: {},
+    // beat id -> selectable licence tiers, fetched once per page load
+    licences: {},
     catalogueLoaded: {
       beats: false,
       samples: false,
@@ -417,6 +422,48 @@
       .product-actions .btn:disabled {
         opacity: .55;
         cursor: not-allowed;
+      }
+
+      /* Licence tier picker on beat cards */
+      .licence-picker {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        margin: 4px 0 10px !important;
+        width: 100% !important;
+      }
+
+      .licence-picker-label {
+        flex: 0 0 auto;
+        font-family: var(--font-mono, monospace) !important;
+        font-size: .64rem !important;
+        letter-spacing: .12em !important;
+        text-transform: uppercase !important;
+        color: rgba(255, 255, 255, .55) !important;
+      }
+
+      .licence-select {
+        flex: 1 1 auto;
+        min-width: 0;
+        box-sizing: border-box !important;
+        padding: 7px 10px !important;
+        border: 1px solid rgba(255, 255, 255, .16) !important;
+        border-radius: 7px !important;
+        background: rgba(0, 0, 0, .45) !important;
+        color: #fff !important;
+        font-family: var(--font-mono, monospace) !important;
+        font-size: .72rem !important;
+        letter-spacing: .02em !important;
+        cursor: pointer;
+      }
+
+      .licence-select:focus-visible {
+        outline: 2px solid #ccff00 !important;
+        outline-offset: 1px !important;
+      }
+
+      .licence-single {
+        margin: 4px 0 10px !important;
       }
 
       #cartSummary[hidden] {
@@ -1070,6 +1117,32 @@
     renderAll();
   }
 
+  // Tiers are public catalogue data (labels and prices). Package keys are
+  // resolved server-side at checkout and are never sent to the browser.
+  async function loadLicences() {
+    try {
+      const data = await getJson(API.licences);
+      const rows = Array.isArray(data?.licences) ? data.licences : [];
+      const byBeat = {};
+      rows.forEach(row => {
+        if (!row || typeof row.beat_id !== "string") return;
+        if (!Number.isFinite(Number(row.price)) || Number(row.price) < 1) return;
+        (byBeat[row.beat_id] = byBeat[row.beat_id] || []).push({
+          licence_key: String(row.licence_key || ""),
+          label: safeText(row.label || row.licence_key),
+          price: Number(row.price),
+          exclusive: row.exclusive === true,
+          available: row.available !== false,
+          unavailable_reason: row.unavailable_reason || null
+        });
+      });
+      state.licences = byBeat;
+    } catch (error) {
+      console.error("Licence tiers could not load:", error);
+      state.licences = {};
+    }
+  }
+
   function categoriesForThisPage() {
     if (document.getElementById("samplesGrid")) return ["samples"];
     if (document.getElementById("studioToolsGrid")) return ["studio-tools"];
@@ -1093,6 +1166,13 @@
 
     // Each catalogue handles its own errors.
     await Promise.all(categoriesForThisPage().map(name => loaders[name]()));
+
+    // Licence tiers only exist for beats. A failure here must not break the
+    // catalogue: the cards simply fall back to the catalogue price and the
+    // legacy checkout, exactly as they did before tiers existed.
+    if (categoriesForThisPage().includes("beats")) {
+      await loadLicences();
+    }
 
     renderAll();
   }
@@ -1152,6 +1232,32 @@
       ? `<span class="product-featured-badge"><i class="fas fa-star" aria-hidden="true"></i> Featured</span>`
       : "";
 
+    // Beat licence tiers. The select is the only place a tier is chosen; the
+    // price shown is that tier's price. Samples and Studio Tools have a single
+    // tier and no select.
+    const tiers = category === "beats" ? licenceTiersFor(product.id) : [];
+    const activeTier = tiers.length
+      ? (tiers.find(tier => !tier.exclusive) || tiers[0])
+      : null;
+    const cardPrice = activeTier ? activeTier.price : product.price;
+
+    const tierPicker = tiers.length > 1
+      ? `
+          <label class="licence-picker">
+            <span class="licence-picker-label">Licence</span>
+            <select class="licence-select" data-id="${escapeHtml(product.id)}">
+              ${tiers.map(tier => `
+                <option
+                  value="${escapeHtml(tier.licence_key)}"
+                  data-price="${Number(tier.price) || 0}"
+                  ${activeTier && tier.licence_key === activeTier.licence_key ? "selected" : ""}
+                >${escapeHtml(tier.label)} — ${money(tier.price)}</option>`).join("")}
+            </select>
+          </label>`
+      : activeTier
+        ? `<p class="product-format licence-single"><i class="fas fa-certificate" aria-hidden="true"></i>${escapeHtml(activeTier.label)}</p>`
+        : "";
+
     const formatLabel =
       category === "beats"
         ? `
@@ -1194,7 +1300,7 @@
         <div class="beat-info product-info">
           <div class="beat-title-row">
             <h3>${escapeHtml(product.title)}</h3>
-            <strong class="product-price">${money(product.price)}</strong>
+            <strong class="product-price" data-price>${money(cardPrice)}</strong>
           </div>
 
           <div class="beat-meta product-meta">
@@ -1203,6 +1309,7 @@
 
           ${description}
           ${formatLabel}
+          ${tierPicker}
 
           <div class="product-actions">
             <button
@@ -1402,13 +1509,38 @@
     }
   }
 
-  function cartSnapshot(product) {
+  // Tiers for a beat, as the storefront should offer them. Sold beats and
+  // active reservations only remove the exclusive option: every other tier
+  // stays purchasable.
+  function licenceTiersFor(beatId) {
+    return (state.licences[beatId] || []).filter(tier => tier.available);
+  }
+
+  function defaultTierFor(beatId) {
+    const tiers = licenceTiersFor(beatId);
+    return tiers.find(tier => !tier.exclusive) || tiers[0] || null;
+  }
+
+  // A cart entry keeps the chosen tier, so its price is the tier price rather
+  // than the catalogue's headline price.
+  function cartSnapshot(product, tier) {
     return {
       id: product.id,
       category: product.category,
       title: product.title,
-      price: product.price,
+      price: tier ? tier.price : product.price,
+      licenceKey: tier ? tier.licence_key : null,
+      licenceLabel: tier ? tier.label : null,
       artwork: productArtwork(product)
+    };
+  }
+
+  function savedTier(snapshot) {
+    if (!snapshot || !snapshot.licenceKey) return null;
+    return {
+      licence_key: snapshot.licenceKey,
+      label: snapshot.licenceLabel,
+      price: snapshot.price
     };
   }
 
@@ -1425,7 +1557,21 @@
     // loaded, and pruning at that point used to empty the cart.
     // Prefer the live product, fall back to the saved snapshot.
     return state.cart
-      .map(key => byKey.get(key) || state.cartItems[key])
+      .map(key => {
+        const live = byKey.get(key);
+        const saved = state.cartItems[key];
+        if (!live) return saved || null;
+
+        const tier = savedTier(saved);
+        if (!tier) return live;
+
+        return {
+          ...live,
+          price: tier.price,
+          licenceKey: tier.licence_key,
+          licenceLabel: tier.label
+        };
+      })
       .filter(Boolean);
   }
 
@@ -1446,7 +1592,8 @@
       const live = byKey.get(key);
 
       if (live) {
-        state.cartItems[key] = cartSnapshot(live);
+        // Refresh title/artwork but keep the tier the buyer chose.
+        state.cartItems[key] = cartSnapshot(live, savedTier(state.cartItems[key]));
         changed = true;
         return true;
       }
@@ -1478,12 +1625,16 @@
     if (changed) saveCart();
   }
 
-  function addToCart(product, openDrawer = true) {
+  function addToCart(product, openDrawer = true, tier = null) {
     if (!product) return;
+
+    const chosen = product.category === "beats"
+      ? (tier || defaultTierFor(product.id))
+      : null;
 
     const key = cartKey(product);
     if (!state.cart.includes(key)) state.cart.push(key);
-    state.cartItems[key] = cartSnapshot(product);
+    state.cartItems[key] = cartSnapshot(product, chosen);
 
     saveCart();
     renderAll();
@@ -1564,7 +1715,7 @@
 
           <div class="cart-item-info">
             <h4>${escapeHtml(product.title)}</h4>
-            <p>${escapeHtml(categoryLabel(product.category))}</p>
+            <p>${escapeHtml(product.licenceLabel || categoryLabel(product.category))}</p>
             <strong>${money(product.price)}</strong>
           </div>
 
@@ -2224,6 +2375,79 @@
     ).padStart(2, "0")}`;
   }
 
+  // The licensing checkout takes one server-priced order for the whole cart,
+  // across categories. Returns null when the cart still holds a beat with no
+  // chosen licence: those go through the untouched legacy checkout instead.
+  function buildLicensingItems(products) {
+    const items = [];
+
+    for (const product of products) {
+      if (product.category === "beats") {
+        if (!product.licenceKey) return null;
+        items.push({
+          category: "beats",
+          beat_id: product.id,
+          licence_key: product.licenceKey
+        });
+      } else {
+        items.push({
+          category: product.category,
+          product_id: product.id
+        });
+      }
+    }
+
+    return items.length ? items : null;
+  }
+
+  async function startLicensingCheckout(email, items) {
+    const orderResponse = await fetch(API.order, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({ email, items })
+    });
+
+    let order = null;
+    try {
+      order = await orderResponse.json();
+    } catch {
+      throw new Error("The order service returned an unreadable response.");
+    }
+
+    if (!orderResponse.ok || !order?.success || !order?.order?.id) {
+      throw new Error(
+        order?.error || "Unable to start your order. Please try again."
+      );
+    }
+
+    const payResponse = await fetch(API.orderPayment, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({ order_id: order.order.id })
+    });
+
+    let payment = null;
+    try {
+      payment = await payResponse.json();
+    } catch {
+      throw new Error("The payment service returned an unreadable response.");
+    }
+
+    if (!payResponse.ok || !payment?.success || !payment?.authorization_url) {
+      throw new Error(
+        payment?.error || "Unable to start checkout. Please try again."
+      );
+    }
+
+    return payment.authorization_url;
+  }
+
   async function checkoutCart() {
     if (state.checkoutBusy) return;
 
@@ -2245,6 +2469,40 @@
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanedEmail)) {
       alert("Enter a valid email address and try again.");
+      return;
+    }
+
+    const licensingItems = buildLicensingItems(products);
+
+    if (licensingItems) {
+      const exclusive = licensingItems.filter(
+        item => item.licence_key === "exclusive"
+      ).length;
+
+      if (exclusive && licensingItems.length > 1) {
+        alert(
+          "An exclusive licence must be the only item in your cart. Remove the other items to continue."
+        );
+        return;
+      }
+
+      state.checkoutBusy = true;
+      renderCart();
+
+      try {
+        const authorizationUrl = await startLicensingCheckout(
+          cleanedEmail,
+          licensingItems
+        );
+        window.location.href = authorizationUrl;
+      } catch (error) {
+        console.error("Checkout error:", error);
+        alert(error.message || "Checkout failed. Please try again.");
+      } finally {
+        state.checkoutBusy = false;
+        renderCart();
+      }
+
       return;
     }
 
@@ -2334,6 +2592,21 @@
   }
 
   function bindEvents() {
+    // Choosing a different licence updates that card's price immediately.
+    document.addEventListener("change", event => {
+      const target = event.target;
+      if (!(target instanceof HTMLSelectElement)) return;
+      if (!target.classList.contains("licence-select")) return;
+
+      const card = target.closest(".product-card");
+      const priceNode = card ? $("[data-price]", card) : null;
+      if (!priceNode) return;
+
+      const option = target.options[target.selectedIndex];
+      const price = Number(option?.dataset.price);
+      if (Number.isFinite(price)) priceNode.textContent = money(price);
+    });
+
     document.addEventListener("click", event => {
       const target = event.target instanceof Element
         ? event.target
@@ -2350,7 +2623,13 @@
         );
 
         if (product && actionButton.dataset.action === "add") {
-          addToCart(product, true);
+          const card = actionButton.closest(".product-card");
+          const picker = card ? $(".licence-select", card) : null;
+          const tier = picker
+            ? licenceTiersFor(product.id)
+              .find(item => item.licence_key === picker.value) || null
+            : null;
+          addToCart(product, true, tier);
         } else if (product && actionButton.dataset.action === "share") {
           shareBeat(product);
         } else if (product && actionButton.dataset.action === "play") {

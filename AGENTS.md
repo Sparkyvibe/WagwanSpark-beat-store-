@@ -68,7 +68,28 @@ preview script by pointing a same-origin `<iframe>` at `/samples` or
 
 Every route needs the `beats` table, so `.base44/schema.sql` creates it (columns inferred from the SQL in `src/index.js`); `published_at`, `featured_position` and `catalogue_position` are added lazily by the Worker on first use.
 
-Licensing tables (Phase 1 on) are owned by `migrations/` and applied with `wrangler d1 migrations apply DB --local --persist-to /data/state` — `.base44/dev-setup.sh` runs this after the seed. Phase 2 writes `orders`/`order_items`; Phase 3 adds payment, fulfilment and entitlement downloads over them (see `docs/phase-3-implementation.md`). See `docs/migrations.md` for the apply and recovery runbook; never apply them to a remote database without approval.
+Licensing tables (Phase 1 on) are owned by `migrations/` and applied with `wrangler d1 migrations apply DB --local --persist-to /data/state` — `.base44/dev-setup.sh` runs this after the seed. Phase 2 writes `orders`/`order_items`; Phase 3 adds payment, fulfilment and entitlement downloads over them; Phase 4 makes one order hold beats, Samples and Studio Tools and emails its links (`docs/phase-3-implementation.md`, `docs/phase-4-implementation.md`). See `docs/migrations.md` for the apply and recovery runbook; never apply them to a remote database without approval.
+
+`0004_unified_checkout.sql` is the one migration that is **not** re-runnable
+(`ALTER TABLE ... ADD COLUMN` has no `IF NOT EXISTS` in SQLite) — apply it once
+through the runner, never by hand.
+
+### Licensing behaviour worth knowing before you touch checkout
+
+- Beat tiers live in `beat_licences`; Samples and Studio Tools have exactly one
+  implicit tier (`standard`, priced from the product row, packaged from its
+  `zip_key`). Prices and packages are always resolved server-side.
+- Inventory rules are in `src/licensing-inventory.js` and run at order creation,
+  payment start and fulfilment. **Reservations never expire by themselves** —
+  only an admin release (`POST /api/admin/exclusive/reservations/release`) frees
+  one. A sold beat blocks every licence, for good.
+- The seed data has no `zip_key` on its demo products, so Phase 1 flagged them in
+  `licence_backfill_issues` and `GET /api/beat-licences` returns no tiers locally.
+  Beat cards then show no licence picker and checkout falls back to the legacy
+  `/api/create-payment` flow. Insert `beat_licences` rows to exercise the tiered
+  flow (and delete them afterwards — they are real prices).
+- Admin ZIP uploads write versioned keys (`-v<n>.zip`); the previous object is
+  never overwritten. Never delete an object a past order or entitlement records.
 
 ### Secrets
 

@@ -12,12 +12,14 @@ const read = relativePath => readFileSync(join(root, relativePath), "utf8");
 const BASE_SCHEMA = read(".base44/schema.sql");
 const MIGRATION_SCHEMA = read("migrations/0001_licensing_schema.sql");
 const MIGRATION_BACKFILL = read("migrations/0002_backfill_legacy_licence.sql");
+const MIGRATION_UNIFIED = read("migrations/0004_unified_checkout.sql");
 
 function makeDb({ failOrderItemInsertAt = 0, invalidOffering = null } = {}) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(BASE_SCHEMA);
   sqlite.exec(MIGRATION_SCHEMA);
   sqlite.exec(MIGRATION_BACKFILL);
+  sqlite.exec(MIGRATION_UNIFIED);
   for (const [id, title, price] of [
     ["beat-a", "Beat A", 5000],
     ["beat-b", "Beat B", 10000],
@@ -209,7 +211,8 @@ test("exclusively sold beat is rejected", async () => {
   const { db, sqlite } = makeDb();
   sqlite.prepare("INSERT INTO exclusive_sales (beat_id, order_id, order_item_id, reference, email, price, package_key) VALUES ('beat-a', 'old-order', 'old-item', 'old-ref', 'buyer@example.com', 4500, 'beats/a.zip')").run();
   const response = await postOrder(db, { email: "buyer@example.com", items: [{ beat_id: "beat-a", licence_key: "mp3" }] });
-  assert.equal(response.status, 400);
+  // 409: the request is well formed, the inventory says no.
+  assert.equal(response.status, 409);
 });
 
 test("invalid email is rejected", async () => {

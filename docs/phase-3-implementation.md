@@ -72,11 +72,12 @@ request.
 
 - Purchasing email for licensing orders (the legacy
   `sendPurchaseEmail`/`deliverPurchaseEmailOnce` path is untouched and unused
-  here) and 7-day email download tokens.
+  here) and 7-day email download tokens. **Superseded by Phase 4.**
 - Storefront/admin UI that calls `create-payment`; the endpoints are inert until
-  a page uses them.
+  a page uses them. **Superseded by Phase 4.**
 - Exclusive reservations/offers (`exclusive_reservations`, `exclusive_offers`)
-  and any order-refund/admin transition tooling.
+  and any order-refund/admin transition tooling. Reservations are still only
+  released by an administrator (see Phase 4); the offer inbox is not built.
 
 ## Verification
 

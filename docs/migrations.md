@@ -16,12 +16,21 @@ From Phase 1 on, licensing tables are owned by versioned migrations under
 | --- | --- | --- |
 | `0001_licensing_schema.sql` | schema, additive | Creates `licences`, `beat_licences`, `orders`, `order_items`, `entitlements`, `exclusive_sales`, `exclusive_reservations`, `exclusive_offers`, `licence_events`, `webhook_events`, `licence_backfill_issues`; adopts `email_deliveries`; seeds the four licence keys. |
 | `0002_backfill_legacy_licence.sql` | data, additive | Grants each `category = 'beats'` row its existing price and `zip_key` under `mp3_wav`; records exceptions in `licence_backfill_issues`. |
+| `0004_unified_checkout.sql` | schema, additive, single-run | Adds `category` and `package_version` to `order_items` and `entitlements`, plus an index on `entitlements (order_item_id)`. |
 
-Both are **additive and idempotent**: `CREATE TABLE IF NOT EXISTS`,
+`0001` and `0002` are **additive and idempotent**: `CREATE TABLE IF NOT EXISTS`,
 `INSERT OR IGNORE`, no `DROP`, no `ALTER` of existing columns, no R2 writes.
-Re-running `0002` is a no-op. Neither migration is read by the running Worker
-until a later phase ships code that uses the tables — so applying them changes
-no customer-facing behaviour.
+Re-running `0002` is a no-op.
+
+`0004` is additive but **not re-runnable**: `ALTER TABLE ... ADD COLUMN` has no
+`IF NOT EXISTS` in SQLite, so it must go through the D1 migration runner exactly
+once. It adds only nullable or defaulted columns — `category` defaults to
+`'beats'`, which is what every pre-0004 row already was — so no existing row is
+rewritten and a code rollback does not require undoing it.
+
+> There is no `0003_*.sql` in this repository. The number was reserved for an
+> exclusive-inventory migration that is not present on any branch; `0004` keeps
+> that slot free. Gaps are harmless — D1 applies migrations in filename order.
 
 ## Running them
 
@@ -76,6 +85,13 @@ wrangler d1 execute wagwanspark-beats-db --remote \
 # nothing was silently skipped
 wrangler d1 execute wagwanspark-beats-db --remote \
   --command "SELECT issue, COUNT(*) AS n FROM licence_backfill_issues GROUP BY issue"
+
+# 0004: every pre-existing order item is still a beat, and the item/entitlement
+# counts are exactly what the backup recorded
+wrangler d1 execute wagwanspark-beats-db --remote \
+  --command "SELECT COUNT(*) AS n, SUM(category = 'beats') AS beats FROM order_items"
+wrangler d1 execute wagwanspark-beats-db --remote \
+  --command "SELECT COUNT(*) AS n FROM entitlements"
 ```
 
 Expected: every beat has at most one enabled licence; `licence_price` equals

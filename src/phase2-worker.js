@@ -1,4 +1,11 @@
 import legacyWorker from "./index.js";
+import {
+  LEGACY_PRODUCT_TIER,
+  findInventoryConflict,
+  inventoryConflictMessage,
+  isNonBeatCategory,
+  packageVersionFromKey
+} from "./licensing-inventory.js";
 
 const MAX_REQUEST_BYTES = 16 * 1024;
 const MAX_ITEMS = 25;
@@ -33,34 +40,163 @@ function makeReference() {
   return `WS-${Date.now().toString(36).toUpperCase()}-${randomHex(16).toUpperCase()}`;
 }
 
+const BEAT_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const LICENCE_KEY_PATTERN = /^[a-z0-9_]+$/;
+
+// ==========================================
+// SELECTION NORMALISATION
+//
+// Two item shapes are accepted in the same order:
+//
+//   beat      { beat_id: "sun-fire", licence_key: "mp3" }
+//             { category: "beats", beat_id: "sun-fire", licence_key: "mp3" }
+//   product   { category: "samples", product_id: "drum-kit" }
+//             { category: "studio-tools", product_id: "mix-chain" }
+//
+// Non-beat items carry no licence key: Samples and Studio Tools each have one
+// legacy purchase tier, decided by the server. Anything the browser sends for
+// price, package key or tier label is ignored.
+// ==========================================
 function normalizeItems(data) {
   const values = Array.isArray(data.items) ? data.items : null;
   if (!values || values.length < 1 || values.length > MAX_ITEMS) {
-    return { error: `Provide between 1 and ${MAX_ITEMS} selected beats.` };
+    return { error: `Provide between 1 and ${MAX_ITEMS} selected products.` };
   }
 
   const items = [];
   const seen = new Set();
   for (const value of values) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
-      return { error: "Each selection must include a beat and licence." };
+      return { error: "Each selection must include a product." };
     }
-    const beatId = value.beat_id;
+
+    const requestedCategory = typeof value.category === "string"
+      ? value.category.trim()
+      : "";
+
+    if (isNonBeatCategory(requestedCategory)) {
+      const productId = value.product_id ?? value.id;
+      if (typeof productId !== "string" || productId.length > 80 ||
+          !BEAT_ID_PATTERN.test(productId)) {
+        return { error: "Each selected product must be valid." };
+      }
+      const key = `${requestedCategory}:${productId}`;
+      if (seen.has(key)) {
+        return { error: "Duplicate product selections are not allowed." };
+      }
+      seen.add(key);
+      items.push({ category: requestedCategory, productId });
+      continue;
+    }
+
+    if (requestedCategory && requestedCategory !== "beats") {
+      return { error: "Each selected product must belong to a known catalogue." };
+    }
+
+    const beatId = value.beat_id ?? value.id;
     const licenceKey = value.licence_key;
     if (typeof beatId !== "string" || beatId.length > 80 ||
-        !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(beatId) ||
+        !BEAT_ID_PATTERN.test(beatId) ||
         typeof licenceKey !== "string" || licenceKey.length > 64 ||
-        !/^[a-z0-9_]+$/.test(licenceKey)) {
+        !LICENCE_KEY_PATTERN.test(licenceKey)) {
       return { error: "Each selected beat and licence key must be valid." };
     }
-    const pair = `${beatId}:${licenceKey}`;
+    const pair = `beats:${beatId}:${licenceKey}`;
     if (seen.has(pair)) {
       return { error: "Duplicate beat and licence selections are not allowed." };
     }
     seen.add(pair);
-    items.push({ beatId, licenceKey });
+    items.push({ category: "beats", beatId, licenceKey });
   }
+
+  // An exclusive licence is the whole order or nothing: rights on that beat
+  // cannot be shared with any other line, including another licence of the
+  // same beat.
+  const exclusiveItems = items.filter(item => item.licenceKey === "exclusive");
+  if (exclusiveItems.length && items.length > 1) {
+    return {
+      error: "An exclusive licence must be the only item in its order."
+    };
+  }
+
   return { items };
+}
+
+async function resolveBeatSelection(item, env) {
+  const { beatId, licenceKey } = item;
+
+  const beat = await env.DB.prepare(
+    "SELECT id, title, status, category FROM beats WHERE id = ?"
+  ).bind(beatId).first();
+  if (!beat || beat.status !== "published" || beat.category !== "beats") {
+    return { error: "One or more selected beats are unavailable for purchase." };
+  }
+
+  const licence = await env.DB.prepare(
+    "SELECT licence_key, label, enabled FROM licences WHERE licence_key = ?"
+  ).bind(licenceKey).first();
+  if (!licence || !licence.enabled) {
+    return { error: "One or more selected licences are unavailable." };
+  }
+
+  const offering = await env.DB.prepare(
+    "SELECT price, package_key, enabled FROM beat_licences WHERE beat_id = ? AND licence_key = ?"
+  ).bind(beatId, licenceKey).first();
+  if (!offering || !offering.enabled) {
+    return { error: "One or more selected licences are unavailable." };
+  }
+  if (!Number.isSafeInteger(offering.price) || offering.price < 1) {
+    return { error: "One or more selected licences have an invalid price." };
+  }
+  if (typeof offering.package_key !== "string" || !offering.package_key.trim()) {
+    return { error: "One or more selected licences are missing a package key." };
+  }
+
+  return {
+    selection: {
+      category: "beats",
+      beat_id: beat.id,
+      beat_title: beat.title,
+      licence_key: licenceKey,
+      licence_label: licence.label,
+      price: offering.price,
+      package_key: offering.package_key,
+      package_version: packageVersionFromKey(offering.package_key)
+    }
+  };
+}
+
+async function resolveProductSelection(item, env) {
+  const product = await env.DB.prepare(
+    `SELECT id, title, status, category, price, zip_key
+       FROM beats WHERE id = ?`
+  ).bind(item.productId).first();
+
+  // The category is checked, not inferred: a Samples id submitted as a Studio
+  // Tool must not resolve.
+  if (!product || product.status !== "published" ||
+      product.category !== item.category) {
+    return { error: "One or more selected products are unavailable for purchase." };
+  }
+  if (!Number.isSafeInteger(product.price) || product.price < 1) {
+    return { error: "One or more selected products have an invalid price." };
+  }
+  if (typeof product.zip_key !== "string" || !product.zip_key.trim()) {
+    return { error: "One or more selected products are missing a package key." };
+  }
+
+  return {
+    selection: {
+      category: product.category,
+      beat_id: product.id,
+      beat_title: product.title,
+      licence_key: LEGACY_PRODUCT_TIER.key,
+      licence_label: LEGACY_PRODUCT_TIER.label,
+      price: product.price,
+      package_key: product.zip_key,
+      package_version: packageVersionFromKey(product.zip_key)
+    }
+  };
 }
 
 async function resolveSelection(data, env) {
@@ -77,48 +213,21 @@ async function resolveSelection(data, env) {
 
   const selections = [];
   let total = 0;
-  for (const { beatId, licenceKey } of normalized.items) {
-    const beat = await env.DB.prepare(
-      "SELECT id, title, status, category FROM beats WHERE id = ?"
-    ).bind(beatId).first();
-    if (!beat || beat.status !== "published" || beat.category !== "beats") {
-      return { error: "One or more selected beats are unavailable for purchase." };
-    }
+  for (const item of normalized.items) {
+    const resolved = item.category === "beats"
+      ? await resolveBeatSelection(item, env)
+      : await resolveProductSelection(item, env);
+    if (resolved.error) return resolved;
 
-    const sold = await env.DB.prepare(
-      "SELECT beat_id FROM exclusive_sales WHERE beat_id = ?"
-    ).bind(beatId).first();
-    if (sold) return { error: "One or more selected beats are unavailable for purchase." };
+    total += resolved.selection.price;
+    selections.push(resolved.selection);
+  }
 
-    const licence = await env.DB.prepare(
-      "SELECT licence_key, label, enabled FROM licences WHERE licence_key = ?"
-    ).bind(licenceKey).first();
-    if (!licence || !licence.enabled) {
-      return { error: "One or more selected licences are unavailable." };
-    }
-
-    const offering = await env.DB.prepare(
-      "SELECT price, package_key, enabled FROM beat_licences WHERE beat_id = ? AND licence_key = ?"
-    ).bind(beatId, licenceKey).first();
-    if (!offering || !offering.enabled) {
-      return { error: "One or more selected licences are unavailable." };
-    }
-    if (!Number.isSafeInteger(offering.price) || offering.price < 1) {
-      return { error: "One or more selected licences have an invalid price." };
-    }
-    if (typeof offering.package_key !== "string" || !offering.package_key.trim()) {
-      return { error: "One or more selected licences are missing a package key." };
-    }
-
-    total += offering.price;
-    selections.push({
-      beat_id: beatId,
-      beat_title: beat.title,
-      licence_key: licenceKey,
-      licence_label: licence.label,
-      price: offering.price,
-      package_key: offering.package_key
-    });
+  // Inventory is re-checked here, when payment starts and again at
+  // fulfilment — a reservation or a sale can appear in between.
+  const conflict = await findInventoryConflict(env, selections);
+  if (conflict) {
+    return { error: inventoryConflictMessage(conflict), conflict };
   }
 
   const amount = total * 100;
@@ -150,7 +259,10 @@ async function createLicensingOrder(request, env) {
   }
 
   const resolved = await resolveSelection(body, env);
-  if (resolved.error) return json({ success: false, error: resolved.error }, 400);
+  if (resolved.error) {
+    const status = resolved.conflict ? 409 : 400;
+    return json({ success: false, error: resolved.error }, status);
+  }
 
   const orderId = makeOrderId();
   const reference = makeReference();
@@ -166,8 +278,10 @@ async function createLicensingOrder(request, env) {
        VALUES (?, ?, ?, 'NGN', ?, 'pending', 'paystack', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
     ).bind(orderId, reference, resolved.email, resolved.amount),
     ...items.map(item => env.DB.prepare(
-      `INSERT INTO order_items (id, order_id, beat_id, beat_title, licence_key, licence_label, price, package_key, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+      `INSERT INTO order_items
+         (id, order_id, beat_id, beat_title, licence_key, licence_label, price,
+          package_key, category, package_version, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
     ).bind(
       item.id,
       orderId,
@@ -176,7 +290,9 @@ async function createLicensingOrder(request, env) {
       item.licence_key,
       item.licence_label,
       item.price,
-      item.package_key
+      item.package_key,
+      item.category,
+      item.package_version
     ))
   ];
 
